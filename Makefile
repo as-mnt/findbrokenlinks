@@ -1,5 +1,5 @@
 .PHONY: help venv install install-dev test test-unit test-integration lint typecheck clean \
-        run run-page run-internal run-all run-html run-json run-multi smoke
+        run run-page run-internal run-all run-html run-json run-jsonl run-multi smoke
 
 PY      ?= python3
 VENV    ?= .venv
@@ -70,10 +70,22 @@ run-html: install ## HTML report → $(OUT_DIR)/report.html. URL=...
 	$(FBL) $(URL) --mode internal+external --rate-limit $(RATE) \
 	    --format html -o $(OUT_DIR)/report.html
 
-run-json: install ## JSON report → $(OUT_DIR)/report.json. URL=...
+run-json: install ## JSON report → $(OUT_DIR)/report.json (written at the end). URL=...
 	mkdir -p $(OUT_DIR)
 	$(FBL) $(URL) --mode internal+external --rate-limit $(RATE) \
 	    --format json -o $(OUT_DIR)/report.json
+
+# JSONL = JSON Lines: one finding per line as a self-contained JSON object.
+# Unlike `run-json` (which buffers everything and writes a single document at
+# the end of the crawl), JSONL streams — each finding is appended to the file
+# the moment it is discovered. Use this for long crawls when you want to
+# `tail -f $(OUT_DIR)/report.jsonl` and see findings appear in real time, or
+# when you want partial output preserved if the crawl is interrupted.
+# Easy to post-process: `jq` reads it line-by-line, no array wrapper needed.
+run-jsonl: install ## Streaming JSONL report → $(OUT_DIR)/report.jsonl (tail-able live). URL=...
+	mkdir -p $(OUT_DIR)
+	$(FBL) $(URL) --mode internal+external --rate-limit $(RATE) \
+	    --format jsonl -o $(OUT_DIR)/report.jsonl
 
 run-multi: install ## Emit csv/json/html/markdown into $(OUT_DIR)/. URL=...
 	$(FBL) $(URL) --mode internal+external --rate-limit $(RATE) \
