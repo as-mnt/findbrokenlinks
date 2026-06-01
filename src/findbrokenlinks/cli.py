@@ -127,7 +127,8 @@ def _config_from_args(args: argparse.Namespace) -> Config:
     )
 
 
-def _write_outputs(config: Config, findings) -> None:
+def _write_batch_outputs(config: Config, findings) -> None:
+    """Write outputs for batch-only or multi-format runs (called after crawl finishes)."""
     if len(config.formats) > 1:
         if not config.output_dir:
             raise SystemExit("multiple --format values require --output-dir")
@@ -155,10 +156,39 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     _setup_logging(args.verbose, args.log_file)
     config = _config_from_args(args)
+
+    # Streaming path: single streamable format → write incrementally as findings appear.
+    if len(config.formats) == 1:
+        reporter = get_reporter(config.formats[0])
+        if reporter.streaming:
+            return _run_streaming(config, reporter)
+
     findings = asyncio.run(crawl(config))
-    _write_outputs(config, findings)
+    _write_batch_outputs(config, findings)
     # Non-zero exit if there are error-level findings — useful for CI.
     return 1 if any(f.worst_severity == "error" for f in findings) else 0
+
+
+def _run_streaming(config: Config, reporter) -> int:
+    """Open output once, then emit each finding as it arrives from the crawl."""
+    out = config.output_path.open("w", encoding="utf-8", newline="") \
+        if config.output_path else sys.stdout
+    has_error = [False]
+    try:
+        reporter.stream_start(out)
+
+        def on_finding(f):
+            reporter.stream_append(f, out)
+            if f.worst_severity == "error":
+                has_error[0] = True
+
+        asyncio.run(crawl(config, on_finding=on_finding))
+        reporter.stream_finish(out)
+    finally:
+        if out is not sys.stdout:
+            out.close()
+            print(f"wrote {config.output_path}", file=sys.stderr)
+    return 1 if has_error[0] else 0
 
 
 if __name__ == "__main__":

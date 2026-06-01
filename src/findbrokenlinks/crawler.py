@@ -3,13 +3,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import secrets
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from urllib.parse import urlsplit
 
 import httpx
 
 from findbrokenlinks.checks import REGISTRY as CHECK_REGISTRY  # noqa: F401 — registry side effect
-from findbrokenlinks.checks.base import CheckContext, active_checks
+from findbrokenlinks.checks.base import Check, CheckContext, active_checks
 from findbrokenlinks.checks.soft_404_pattern import load_patterns
 from findbrokenlinks.checks.soft_404_probe import baseline_from_fetch
 from findbrokenlinks.config import Config
@@ -22,8 +22,18 @@ from findbrokenlinks.scope import Scope, host_of, normalize_url
 
 log = logging.getLogger("findbrokenlinks")
 
+FindingCallback = Callable[[Finding], None]
 
-async def crawl(config: Config) -> list[Finding]:
+
+async def crawl(
+    config: Config,
+    on_finding: FindingCallback | None = None,
+) -> list[Finding]:
+    """Crawl the site and return all findings.
+
+    If ``on_finding`` is provided, it is called for each finding as it is
+    produced — enabling incremental report writing during the crawl.
+    """
     seed = normalize_url(config.start_url)
     scope = Scope(seed, config.mode)
     limiter = TokenBucket(config.rate_limit_rps) if config.rate_limit_rps > 0 else NoopLimiter()
@@ -57,15 +67,13 @@ async def crawl(config: Config) -> list[Finding]:
             base_host=host_of(seed),
             soft404_patterns=load_patterns(config.patterns_path),
         )
-        state = _CrawlState(scope, robots, fetcher, ctx, config)
+        state = _CrawlState(scope, robots, fetcher, ctx, config, on_finding)
 
         # Synthetic seed LinkRef so seed-page issues surface in findings.
-        state.links.append(LinkRef(url=seed, source_page=seed, anchor=None, tag="seed"))
+        state.register_link(LinkRef(url=seed, source_page=seed, anchor=None, tag="seed"))
 
-        # Seed queue.
         await state.enqueue(seed, extract=True)
 
-        # Sitemap (optional) — internal only, recurse.
         if config.use_sitemap and config.mode != "page":
             await _seed_from_sitemap(client, seed, state, config.user_agent)
 
@@ -77,7 +85,7 @@ async def crawl(config: Config) -> list[Finding]:
             w.cancel()
         await asyncio.gather(*workers, return_exceptions=True)
 
-        return _build_findings(state, ctx)
+        return state.findings
 
 
 class _CrawlState:
@@ -88,20 +96,28 @@ class _CrawlState:
         fetcher: Fetcher,
         ctx: CheckContext,
         config: Config,
+        on_finding: FindingCallback | None,
     ) -> None:
         self.scope = scope
         self.robots = robots
         self.fetcher = fetcher
         self.ctx = ctx
         self.config = config
+        self.on_finding = on_finding
         self.extractor = HTMLExtractor()
+        self.checks: list[Check] = active_checks(ctx)
+
         self.queue: asyncio.Queue[tuple[str, bool, int]] = asyncio.Queue()
         self.enqueued: set[str] = set()
         self.fetched: dict[str, FetchResult] = {}
-        self.extracted_from: set[str] = set()  # normalized final URLs we've already parsed
-        self.links: list[LinkRef] = []
+        self.extracted_from: set[str] = set()
         self.probed_hosts: set[str] = set()
         self.probe_locks: dict[str, asyncio.Lock] = {}
+
+        # Links discovered but waiting for their target URL's fetch to complete.
+        self.pending_links: dict[str, list[LinkRef]] = {}
+        # Accumulated findings (also surfaced via on_finding as they're produced).
+        self.findings: list[Finding] = []
 
     async def enqueue(self, url: str, *, extract: bool, depth: int = 0) -> None:
         if url in self.enqueued:
@@ -110,6 +126,37 @@ class _CrawlState:
             return
         self.enqueued.add(url)
         await self.queue.put((url, extract, depth))
+
+    def register_link(self, link: LinkRef) -> None:
+        """Index a LinkRef; if its target is already fetched, evaluate immediately."""
+        target = normalize_url(link.url)
+        fetch = self.fetched.get(target)
+        if fetch is not None:
+            self._evaluate(link, fetch)
+        else:
+            self.pending_links.setdefault(target, []).append(link)
+
+    def register_fetch(self, url: str, fetch: FetchResult) -> None:
+        """Cache the fetch and flush any pending links targeting it."""
+        self.fetched[url] = fetch
+        for link in self.pending_links.pop(url, []):
+            self._evaluate(link, fetch)
+
+    def _evaluate(self, link: LinkRef, fetch: FetchResult) -> None:
+        issues = []
+        for check in self.checks:
+            issue = check.evaluate(link, fetch, self.ctx)
+            if issue is not None:
+                issues.append(issue)
+        if not issues:
+            return
+        finding = Finding(link=link, fetch=fetch, issues=issues)
+        self.findings.append(finding)
+        if self.on_finding is not None:
+            try:
+                self.on_finding(finding)
+            except Exception:  # noqa: BLE001 — callback must not break the crawl
+                log.exception("on_finding callback failed for %s", link.url)
 
 
 async def _worker(state: _CrawlState) -> None:
@@ -138,13 +185,11 @@ async def _process(state: _CrawlState, url: str, *, extract: bool, depth: int) -
 
     await _ensure_probe(state, url)
     fetch = await state.fetcher.fetch(url)
-    state.fetched[url] = fetch
+    state.register_fetch(url, fetch)
 
     if not extract or not fetch.body:
         return
 
-    # The body actually belongs to final_url. Attribute links there and dedupe so a single
-    # page reached via redirect isn't parsed twice.
     final_norm = normalize_url(fetch.final_url)
     if final_norm in state.extracted_from:
         return
@@ -152,7 +197,7 @@ async def _process(state: _CrawlState, url: str, *, extract: bool, depth: int) -
     source = fetch.final_url
 
     for link in state.extractor.extract(fetch.body, source_page=source):
-        state.links.append(link)
+        state.register_link(link)
         target = normalize_url(link.url)
         if not state.scope.should_fetch(target):
             continue
@@ -168,7 +213,7 @@ async def _ensure_probe(state: _CrawlState, url: str) -> None:
     if not host or host in state.probed_hosts:
         return
     if not state.scope.is_internal(url):
-        return  # probe only domains we'll crawl
+        return
     lock = state.probe_locks.setdefault(host, asyncio.Lock())
     async with lock:
         if host in state.probed_hosts:
@@ -211,25 +256,6 @@ def _parse_sitemap(xml: str) -> Iterable[str]:
 
     root = ET.fromstring(xml)
     ns = "{http://www.sitemaps.org/schemas/sitemap/0.9}"
-    # Handle both <urlset> and <sitemapindex>.
     for loc in root.findall(f".//{ns}loc"):
         if loc.text:
             yield loc.text.strip()
-
-
-def _build_findings(state: _CrawlState, ctx: CheckContext) -> list[Finding]:
-    checks = active_checks(ctx)
-    findings: list[Finding] = []
-    for link in state.links:
-        target = normalize_url(link.url)
-        fetch = state.fetched.get(target)
-        if fetch is None:
-            continue
-        issues = []
-        for check in checks:
-            issue = check.evaluate(link, fetch, ctx)
-            if issue is not None:
-                issues.append(issue)
-        if issues:
-            findings.append(Finding(link=link, fetch=fetch, issues=issues))
-    return findings

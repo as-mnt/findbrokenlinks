@@ -19,8 +19,11 @@ edits needed.
 - **Six built-in checks** — flag HTTP errors, network failures, redirect chains,
   redirects to the home page, and two soft-404 detectors (regex patterns +
   baseline probing).
-- **Seven output formats**: `csv`, `tsv`, `json`, `html`, `markdown`,
+- **Eight output formats**: `csv`, `tsv`, `json`, `jsonl`, `html`, `markdown`,
   `junit` (XML), `sarif`. Emit multiple at once with `--format a,b,c`.
+- **Incremental report writing**: when a single streamable format is selected
+  (`csv`, `tsv`, `jsonl`), each finding is appended to the output as soon as it
+  is discovered — you can `tail -f` the report while the crawl runs.
 - **Polite by default**: respects `robots.txt`, rate-limited (token bucket),
   bounded concurrency, configurable timeouts and redirect caps.
 - **Bandwidth-efficient**: streams responses — binary content (PDFs, archives,
@@ -103,7 +106,8 @@ Checks:
   --no-soft404-probe
 
 Output:
-  --format fmt[,fmt...]          csv|tsv|json|html|markdown|junit|sarif (default: tsv)
+  --format fmt[,fmt...]          csv|tsv|json|jsonl|html|markdown|junit|sarif (default: tsv)
+                                 streaming formats: csv, tsv, jsonl
   --output PATH                  default: stdout (single format only)
   --output-dir DIR               required for multi-format output
 

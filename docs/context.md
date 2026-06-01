@@ -137,6 +137,15 @@ class MyCheck(Check):
 Тест расширяемости: `tests/test_extension.py` показывает, что регистрация и работа
 проходят без правок ядра.
 
+### Стриминговый репортер (опционально)
+
+Если формат может писать инкрементально (по находке), выставить
+`streaming: ClassVar[bool] = True` и реализовать `stream_start(out)`,
+`stream_append(finding, out)`, `stream_finish(out)`. CLI автоматически
+переключится на потоковую запись, если выбран один такой формат.
+
+CSV, TSV и JSONL — примеры (`reporters/csv_reporter.py` и пр.).
+
 ## Как добавить новый формат отчёта
 
 `src/findbrokenlinks/reporters/my_reporter.py`:
@@ -197,7 +206,8 @@ Checks:
   --no-soft404-probe
 
 Output:
-  --format fmt[,fmt...]          csv|tsv|json|html|markdown|junit|sarif (default: tsv)
+  --format fmt[,fmt...]          csv|tsv|json|jsonl|html|markdown|junit|sarif (default: tsv)
+                                 streaming: csv, tsv, jsonl — пишут по мере обхода
   --output PATH                  default: stdout (один формат)
   --output-dir DIR               для нескольких форматов: report.<ext>
 
