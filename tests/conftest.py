@@ -147,6 +147,24 @@ async def rloop_b(_):
     return RedirectResponse("/rloop-a", status_code=302)
 
 
+# Redirect from internal (127.0.0.1) to an "external" host (localhost). Both resolve to
+# the same uvicorn instance, but scope.is_internal treats hostnames as distinct strings.
+async def external_bait(request):
+    port = request.url.port
+    return RedirectResponse(f"http://localhost:{port}/external-content", status_code=302)
+
+
+async def external_content(request):
+    port = request.url.port
+    html = (
+        "<html><head><title>foreign</title></head><body>"
+        f"<a href='http://localhost:{port}/foreign-link-1'>1</a>"
+        f"<a href='http://localhost:{port}/foreign-link-2'>2</a>"
+        "</body></html>"
+    )
+    return HTMLResponse(html)
+
+
 # A "probe" route that returns the *same* body for any unknown URL — common soft-404 behavior.
 async def catchall_soft404(_):
     return HTMLResponse(SOFT404_HTML)
@@ -173,6 +191,8 @@ def _make_app() -> Starlette:
         Route("/selfloop", selfloop),
         Route("/rloop-a", rloop_a),
         Route("/rloop-b", rloop_b),
+        Route("/external-bait", external_bait),
+        Route("/external-content", external_content),
     ]
     app = Starlette(routes=routes)
 

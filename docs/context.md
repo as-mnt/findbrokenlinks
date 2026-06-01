@@ -294,6 +294,10 @@ Override-переменные: `URL=…`, `RATE=…`, `OUT_DIR=…`.
 - **Cycle tests + `--max-pages`** — тесты `tests/test_cycles.py` фиксируют корректную
   обработку link-циклов / self-loop / redirect-loop. Добавлен `--max-pages` (default 10000)
   как safety net против безграничных URL-пространств; работает на уровне `enqueue()`.
+- **Scope leak fix** — в режимах `internal` / `internal+external` краулер не парсит body,
+  если `fetch.final_url` после редиректа оказался на чужом хосте. Раньше: решение
+  `extract=True` принималось по URL запроса, тело же бралось у `final_url` — внешний редирект
+  приводил к парсингу чужого контента. `tests/test_scope_leak.py` ловит регрессию.
 
 ## Что осталось вне первой итерации
 

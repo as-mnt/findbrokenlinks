@@ -200,6 +200,20 @@ async def _process(state: _CrawlState, url: str, *, extract: bool, depth: int) -
     if not extract or not fetch.body:
         return
 
+    # extract=True was decided from the request URL, but after redirects the body
+    # actually belongs to fetch.final_url. In internal / internal+external modes the
+    # redirect may have left the seed domain — refuse to parse foreign content to
+    # avoid misattributed findings and pending_links bloat. Page mode is exempt:
+    # the user pointed at this single URL, so following its redirect destination
+    # is the documented behavior.
+    if state.config.mode != "page" and not state.scope.is_internal(fetch.final_url):
+        log.info(
+            "skipping extraction: %s redirected to external host %s",
+            url,
+            fetch.final_url,
+        )
+        return
+
     final_norm = normalize_url(fetch.final_url)
     if final_norm in state.extracted_from:
         return
