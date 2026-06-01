@@ -91,6 +91,9 @@ findbrokenlinks <URL> [options]
 Scope:
   --mode {page,internal,internal+external}   default: internal+external
   --depth N                                  default: 0 (unlimited)
+  --max-pages N                              default: 10000 (0 = unlimited);
+                                             safety cap against unbounded URL spaces
+                                             (session IDs, calendars, search facets)
   --use-sitemap                              seed from /sitemap.xml
 
 Network:

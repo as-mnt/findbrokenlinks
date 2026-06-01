@@ -34,6 +34,13 @@ def build_parser() -> argparse.ArgumentParser:
         default="internal+external",
     )
     g.add_argument("--depth", type=int, default=0, help="max link depth (0 = unlimited)")
+    g.add_argument(
+        "--max-pages",
+        type=int,
+        default=10_000,
+        help="safety cap on total URLs enqueued (default: 10000, 0 = unlimited). "
+        "Protects against unbounded URL spaces (session IDs, calendars, search facets).",
+    )
     g.add_argument("--use-sitemap", action="store_true", help="seed queue from /sitemap.xml")
 
     g = p.add_argument_group("network")
@@ -106,6 +113,7 @@ def _config_from_args(args: argparse.Namespace) -> Config:
         start_url=args.url,
         mode=args.mode,
         depth=args.depth,
+        max_pages=args.max_pages,
         rate_limit_rps=args.rate_limit_rps,
         concurrency=args.concurrency,
         timeout_s=args.timeout_s,

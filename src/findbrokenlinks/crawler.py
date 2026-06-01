@@ -118,11 +118,21 @@ class _CrawlState:
         self.pending_links: dict[str, list[LinkRef]] = {}
         # Accumulated findings (also surfaced via on_finding as they're produced).
         self.findings: list[Finding] = []
+        # Has the max_pages-reached message already been logged? Log it once.
+        self._cap_logged = False
 
     async def enqueue(self, url: str, *, extract: bool, depth: int = 0) -> None:
         if url in self.enqueued:
             return
         if self.config.depth and depth > self.config.depth:
+            return
+        if self.config.max_pages and len(self.enqueued) >= self.config.max_pages:
+            if not self._cap_logged:
+                log.info(
+                    "max_pages=%d reached — further URLs will be skipped",
+                    self.config.max_pages,
+                )
+                self._cap_logged = True
             return
         self.enqueued.add(url)
         await self.queue.put((url, extract, depth))

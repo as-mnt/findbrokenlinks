@@ -12,7 +12,7 @@ FBL      = $(BIN)/findbrokenlinks
 # Default URL for `make run*` targets — override on the command line:
 #   make run URL=https://example.com
 URL     ?= https://example.com
-RATE    ?= 5
+RATE    ?= 50
 OUT_DIR ?= reports
 
 help: ## Show available targets

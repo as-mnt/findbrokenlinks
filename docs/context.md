@@ -226,6 +226,9 @@ findbrokenlinks <URL> [options]
 Scope:
   --mode {page,internal,internal+external}   default: internal+external
   --depth N                                  default: 0 (unlimited)
+  --max-pages N                              default: 10000 (0 = unlimited);
+                                             страховка от безграничных URL-пространств
+                                             (session-id, календари, search-facets)
   --use-sitemap                              подсасывать /sitemap.xml в очередь
 
 Network:
@@ -287,6 +290,9 @@ Override-переменные: `URL=…`, `RATE=…`, `OUT_DIR=…`.
   `Reporter`; новый формат `jsonl`; CLI авто-стримит для одного streamable формата.
 - **Makefile run-jsonl** (`37f8a62`) — отдельный таргет для стриминга JSONL, с пояснением в
   комментарии когда выбирать его вместо `run-json`.
+- **Cycle tests + `--max-pages`** — тесты `tests/test_cycles.py` фиксируют корректную
+  обработку link-циклов / self-loop / redirect-loop. Добавлен `--max-pages` (default 10000)
+  как safety net против безграничных URL-пространств; работает на уровне `enqueue()`.
 
 ## Что осталось вне первой итерации
 

@@ -12,6 +12,7 @@ class Config:
     start_url: str
     mode: ScopeMode = "internal+external"
     depth: int = 0  # 0 = unlimited
+    max_pages: int = 10_000  # safety cap on total enqueued URLs; 0 = unlimited
 
     rate_limit_rps: float = 5.0
     concurrency: int = 10
