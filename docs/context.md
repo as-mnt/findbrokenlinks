@@ -6,20 +6,24 @@
 
 - ✅ Все 6 контролей и 8 репортеров (`csv`, `tsv`, `json`, `jsonl`, `html`, `markdown`, `junit`, `sarif`)
 - ✅ Async-краулер с воркер-пулом, token-bucket rate-limit, robots.txt, дедупликация по
-  `final_url` после редиректов
+  `final_url` после редиректов, страховка `--max-pages` против безграничных URL-пространств
+- ✅ Защита от утечки extraction за пределы scope: при редиректе на чужой хост в режимах
+  `internal` / `internal+external` тело не парсится (page mode сохраняет старое поведение)
 - ✅ Ленивый baseline-404 probe на каждый внутренний хост
 - ✅ Streaming-фетчер: бинарные ответы (PDF/архивы/видео) **не качаются вовсе**, текстовые
   читаются чанками до `--max-body-bytes` (default 1 MB)
 - ✅ Streaming-отчёт: при выборе одного streamable формата (`csv` / `tsv` / `jsonl`) находки
   пишутся в файл **по мере появления** — можно `tail -f` во время обхода
 - ✅ CLI с режимами `page` / `internal` / `internal+external`, выбором форматов,
-  `--enable-checks` / `--disable-checks`, `--max-body-bytes`
-- ✅ Makefile с целями для setup / test / lint / типовых запусков (включая `run-jsonl` для стриминга)
-- ✅ 38 тестов (юнит + интеграционные на локальном Starlette), все зелёные
-- ✅ GitHub Actions CI: Python 3.11/3.12/3.13 + ruff + mypy
+  `--enable-checks` / `--disable-checks`; все числовые параметры валидируются argparse-валидаторами
+- ✅ Soft-404 паттерны с 4 target'ами: `title` / `h1` / `body` / `raw` (нетронутый HTML)
+- ✅ Plugin auto-discovery: новый check/reporter = файл с `@register`, `__init__.py` править не нужно
+- ✅ Makefile с целями для setup / test / lint / типовых запусков (`run-jsonl`, `check` = CI gate)
+- ✅ 72 теста (юнит + интеграционные на локальном Starlette), все зелёные
+- ✅ GitHub Actions CI: Python 3.11/3.12/3.13 + ruff + **blocking** mypy
 - ✅ Опубликовано: https://github.com/as-mnt/findbrokenlinks
 
-Размер кода: ~2480 LOC по `src/findbrokenlinks` + `tests/`.
+Размер кода: ~3230 LOC по `src/findbrokenlinks` + `tests/`.
 
 ## Раскладка файлов
 
@@ -76,6 +80,11 @@ findbrokenlinks/
     ├── test_fetcher_streaming.py       # PDF не качается, HTML обрезается по cap
     ├── test_streaming.py               # on_finding callback + JSONL + CLI streaming
     ├── test_extension.py               # доказывает расширяемость через @register
+    ├── test_autodiscover.py            # plugin auto-discovery: новый файл подхватывается
+    ├── test_cycles.py                  # link-цикл / self-loop / redirect loop
+    ├── test_max_pages.py               # --max-pages ограничивает enqueue
+    ├── test_scope_leak.py              # extract не уходит на чужой хост при редиректе
+    ├── test_cli_validation.py          # числовые границы CLI-флагов
     └── test_crawler_integration.py     # end-to-end по локальному серверу
 ```
 
@@ -321,6 +330,15 @@ Override-переменные: `URL=…`, `RATE=…`, `OUT_DIR=…`.
   `@register` не выполнялся. Теперь достаточно положить файл с декоратором в каталог.
   Тесты в `tests/test_autodiscover.py` подтверждают: синтетический check / reporter,
   записанный в каталог при тесте, подхватывается без правок ядра.
+- **mypy CI-blocking** (`bd70494`) — исправлены 13 ошибок типизации: `Check.severity`
+  типизирован как `Literal` (через alias `Severity`), доступ к bs4-атрибутам прикрыт
+  `isinstance(value, str)` гардами через helper'ы `_str_attr` / `_first_rel`, добавлен
+  `types-PyYAML` в dev-deps. `continue-on-error: true` снят с mypy-jobа в CI.
+- **`make check`** (`685e0d2`) — агрегирующая цель `lint → typecheck → test`,
+  зеркалит `.github/workflows/ci.yml`. Запускается локально перед push.
+- **README/code alignment для `REDIRECT_CHAIN`** (`976c88f`) — README говорил `>`,
+  код всегда работал на `>=`. Поправлен README + добавлен boundary-тест, пинающий
+  `hops == threshold` как positive, `hops == threshold - 1` как negative.
 
 ## Что осталось вне первой итерации
 
