@@ -60,6 +60,10 @@ This creates a `.venv/` and installs the package in editable mode. After
 .venv/bin/findbrokenlinks https://example.com --mode page \
     --format html -o report.html
 
+# Streaming JSONL — findings appear in the file as soon as they are discovered
+.venv/bin/findbrokenlinks https://example.com --format jsonl -o report.jsonl &
+tail -f report.jsonl | jq .
+
 # Emit several formats at once
 .venv/bin/findbrokenlinks https://example.com \
     --format csv,json,html,markdown --output-dir reports/
@@ -75,6 +79,7 @@ make run URL=https://example.com
 make run-page URL=https://example.com
 make run-internal URL=https://example.com
 make run-html URL=https://example.com OUT_DIR=reports
+make run-jsonl URL=https://example.com OUT_DIR=reports     # streaming JSONL
 make run-multi URL=https://example.com OUT_DIR=reports
 ```
 
@@ -227,6 +232,8 @@ Design patterns used:
 - **Composite** — built-in + user soft-404 patterns merged
 - **Factory** — `get_reporter(name)` resolves a format string
 - **Pipeline** — Fetcher → Extractor → Checks → Reporter
+- **Observer** — `on_finding` callback drives incremental report writing for
+  streaming formats (csv, tsv, jsonl)
 
 See `docs/plan.md` and `docs/context.md` for the full design and rationale.
 
@@ -234,7 +241,7 @@ See `docs/plan.md` and `docs/context.md` for the full design and rationale.
 
 ```bash
 make install-dev          # set up dev environment
-make test                 # run all 31 tests (~1s)
+make test                 # run all 38 tests (~1s)
 make test-unit            # unit tests only (skip live-server integration)
 make test-integration     # only the live-server integration test
 make lint                 # ruff
