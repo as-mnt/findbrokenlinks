@@ -1,4 +1,11 @@
-# Built-in soft-404 patterns. Each entry: name, target (title|h1|body), regex.
+# Built-in soft-404 patterns. Each entry: name, target, regex.
+#
+# target:
+#   title  — contents of <title> (text)
+#   h1     — first <h1> rendered text
+#   body   — entire page text after BeautifulSoup get_text() — NO HTML tags
+#   raw    — the unaltered HTML body — use when the signal is in markup
+#            (CSS classes, server signatures, tag patterns) that text extraction strips
 - name: generic_page_not_found_title
   target: title
   regex: '(?i)(^|\W)(page not found|not found|404)(\W|$)'
@@ -32,11 +39,11 @@
   regex: "Запрашиваемая страница не найдена|Раздел не найден"
 
 - name: tilda_404
-  target: body
+  target: raw          # `tilda-error-404` is a CSS class — lives in markup, not text
   regex: "tilda-error-404|This page doesn.t exist"
 
 - name: nginx_default_404
-  target: body
+  target: raw          # signature lives in HTML tags that BeautifulSoup strips
   regex: '<center><h1>404 Not Found</h1></center>'
 
 - name: apache_default_404

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from findbrokenlinks.checks.base import CheckContext
 from findbrokenlinks.checks.http_status import HttpStatusCheck
 from findbrokenlinks.checks.network_error import NetworkErrorCheck
@@ -135,6 +137,47 @@ def test_soft404_pattern_skips_4xx():
     f = _fetch(status=404, body="<html><title>Страница не найдена</title></html>")
     # HTTP status check handles 4xx — pattern check stays quiet so we don't double-report.
     assert Soft404PatternCheck().evaluate(_link(), f, ctx) is None
+
+
+def test_soft404_pattern_nginx_default_matches_real_response():
+    """Realistic nginx 404 body — must fire SOFT_404_PATTERN with the nginx rule."""
+    patterns = load_patterns()
+    ctx = _ctx(soft404_patterns=patterns)
+    # Verbatim shape of an nginx default 404 page.
+    body = (
+        "<html>\r\n<head><title>404 Not Found</title></head>\r\n"
+        "<body>\r\n<center><h1>404 Not Found</h1></center>\r\n"
+        "<hr><center>nginx/1.24.0</center>\r\n</body>\r\n</html>\r\n"
+    )
+    f = _fetch(status=200, body=body)
+    issue = Soft404PatternCheck().evaluate(_link(), f, ctx)
+    assert issue is not None
+    # The nginx-specific rule looks for the exact tag layout, which only survives
+    # in `raw`. The check returns on first match — confirm the matching pattern
+    # exists and is configured for the raw target.
+    nginx_rules = [p for p in patterns if p.name == "nginx_default_404"]
+    assert nginx_rules and nginx_rules[0].target == "raw"
+
+
+def test_soft404_pattern_load_rejects_unknown_target(tmp_path):
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("- {name: x, target: nonsense, regex: 'foo'}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="nonsense"):
+        load_patterns(bad)
+
+
+def test_soft404_pattern_user_yaml_can_use_raw_target(tmp_path):
+    custom = tmp_path / "custom.yaml"
+    custom.write_text(
+        "- {name: my_raw_rule, target: raw, regex: 'data-cms=\"foo-not-found\"'}\n",
+        encoding="utf-8",
+    )
+    patterns = load_patterns(custom)
+    ctx = _ctx(soft404_patterns=[p for p in patterns if p.name == "my_raw_rule"])
+    body = '<html><body><div data-cms="foo-not-found">whatever</div></body></html>'
+    f = _fetch(status=200, body=body)
+    issue = Soft404PatternCheck().evaluate(_link(), f, ctx)
+    assert issue is not None and issue.details["pattern"] == "my_raw_rule"
 
 
 # ----- Soft404Probe ----- #

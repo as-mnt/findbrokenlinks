@@ -210,9 +210,16 @@ own without forking — pass `--patterns my_patterns.yaml`:
 
 ```yaml
 - name: my_cms_404
-  target: title           # title | h1 | body
+  target: title           # title | h1 | body | raw
   regex: '(?i)not here'
 ```
+
+`target` picks the search surface:
+
+- `title` / `h1` — text of those elements
+- `body` — full page text after BeautifulSoup `get_text()` — markup stripped
+- `raw` — the unaltered HTML body, including tags, attributes, and server
+  signatures that text extraction would erase
 
 User patterns are merged with the built-in set (Composite).
 
