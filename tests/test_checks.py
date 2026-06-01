@@ -111,6 +111,28 @@ def test_redirect_chain_below_threshold():
     assert RedirectChainCheck().evaluate(_link(), f, ctx) is None
 
 
+def test_redirect_chain_boundary_inclusive():
+    """hops == threshold must trigger; hops == threshold-1 must not.
+
+    Pins the documented `>=` semantics — guards against a future refactor
+    flipping back to a strict `>` and silently changing user expectations.
+    """
+    ctx = _ctx()
+    ctx.config.redirect_chain_threshold = 3
+
+    # Exactly 3 hops → 4 URLs in chain (3 intermediate + final).
+    exact = _fetch(
+        redirect_chain=["a", "b", "c", "d"],
+        final_url="d",
+    )
+    issue = RedirectChainCheck().evaluate(_link(), exact, ctx)
+    assert issue is not None and issue.details["hops"] == 3
+
+    # 2 hops — just below threshold, must not trigger.
+    below = _fetch(redirect_chain=["a", "b", "c"], final_url="c")
+    assert RedirectChainCheck().evaluate(_link(), below, ctx) is None
+
+
 # ----- Soft404Pattern ----- #
 
 def test_soft404_pattern_matches_title():

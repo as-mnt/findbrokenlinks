@@ -131,7 +131,7 @@ Misc:
 | `HTTP_ERROR` | error | response status ≥ 400 |
 | `NETWORK_ERROR` | error | DNS / TCP / TLS / timeout failure |
 | `REDIRECT_TO_HOME` | warning | redirect terminates at `/` (common soft-404 pattern) |
-| `REDIRECT_CHAIN` | warning | redirect chain length > `--redirect-chain-threshold` |
+| `REDIRECT_CHAIN` | warning | redirect chain length >= `--redirect-chain-threshold` |
 | `SOFT_404_PATTERN` | warning | 200 OK but page matches a "not found" regex |
 | `SOFT_404_PROBE` | warning | 200 OK but body matches the host's known 404 baseline |
 
