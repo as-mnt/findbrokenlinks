@@ -20,6 +20,56 @@ def _csv_set(value: str | None) -> set[str]:
     return {v.strip() for v in value.split(",") if v.strip()}
 
 
+# ---- numeric argparse type validators ----
+# argparse converts the raw string via the `type` callable. A validator that
+# raises argparse.ArgumentTypeError surfaces a clean "argument --foo: ..." error
+# instead of a stack trace.
+
+
+def _positive_int(value: str) -> int:
+    """Strictly > 0."""
+    try:
+        i = int(value)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(f"expected an integer, got {value!r}") from e
+    if i <= 0:
+        raise argparse.ArgumentTypeError(f"must be > 0, got {i}")
+    return i
+
+
+def _positive_float(value: str) -> float:
+    """Strictly > 0."""
+    try:
+        f = float(value)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(f"expected a number, got {value!r}") from e
+    if f <= 0:
+        raise argparse.ArgumentTypeError(f"must be > 0, got {f}")
+    return f
+
+
+def _nonneg_int(value: str) -> int:
+    """>= 0. Used where 0 has a documented meaning (usually 'unlimited')."""
+    try:
+        i = int(value)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(f"expected an integer, got {value!r}") from e
+    if i < 0:
+        raise argparse.ArgumentTypeError(f"must be >= 0, got {i}")
+    return i
+
+
+def _nonneg_float(value: str) -> float:
+    """>= 0. Used where 0 has a documented meaning (usually 'unlimited')."""
+    try:
+        f = float(value)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(f"expected a number, got {value!r}") from e
+    if f < 0:
+        raise argparse.ArgumentTypeError(f"must be >= 0, got {f}")
+    return f
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="findbrokenlinks",
@@ -33,10 +83,15 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("page", "internal", "internal+external"),
         default="internal+external",
     )
-    g.add_argument("--depth", type=int, default=0, help="max link depth (0 = unlimited)")
+    g.add_argument(
+        "--depth",
+        type=_nonneg_int,
+        default=0,
+        help="max link depth, must be >= 0 (0 = unlimited)",
+    )
     g.add_argument(
         "--max-pages",
-        type=int,
+        type=_nonneg_int,
         default=10_000,
         help="safety cap on total URLs enqueued (default: 10000, 0 = unlimited). "
         "Protects against unbounded URL spaces (session IDs, calendars, search facets).",
@@ -44,15 +99,37 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--use-sitemap", action="store_true", help="seed queue from /sitemap.xml")
 
     g = p.add_argument_group("network")
-    g.add_argument("--rate-limit", type=float, default=5.0, dest="rate_limit_rps")
-    g.add_argument("--concurrency", type=int, default=10)
-    g.add_argument("--timeout", type=float, default=15.0, dest="timeout_s")
-    g.add_argument("--max-redirects", type=int, default=10)
+    g.add_argument(
+        "--rate-limit",
+        type=_nonneg_float,
+        default=5.0,
+        dest="rate_limit_rps",
+        help="requests per second, must be >= 0 (0 = unlimited)",
+    )
+    g.add_argument(
+        "--concurrency",
+        type=_positive_int,
+        default=10,
+        help="number of worker coroutines, must be >= 1",
+    )
+    g.add_argument(
+        "--timeout",
+        type=_positive_float,
+        default=15.0,
+        dest="timeout_s",
+        help="per-request timeout in seconds, must be > 0",
+    )
+    g.add_argument(
+        "--max-redirects",
+        type=_nonneg_int,
+        default=10,
+        help="max redirect hops, must be >= 0 (0 = do not follow)",
+    )
     g.add_argument(
         "--max-body-bytes",
-        type=int,
+        type=_positive_int,
         default=1_048_576,
-        help="cap on text response body size (default: 1048576 = 1 MB). "
+        help="cap on text response body size (default: 1048576 = 1 MB), must be > 0. "
         "Non-text responses are never downloaded.",
     )
     g.add_argument(
@@ -64,7 +141,12 @@ def build_parser() -> argparse.ArgumentParser:
     g = p.add_argument_group("checks")
     g.add_argument("--enable-checks", default=None, help="comma-separated check codes")
     g.add_argument("--disable-checks", default=None, help="comma-separated check codes")
-    g.add_argument("--redirect-chain-threshold", type=int, default=3)
+    g.add_argument(
+        "--redirect-chain-threshold",
+        type=_positive_int,
+        default=3,
+        help="flag chains with >= N hops, must be >= 1 (default: 3)",
+    )
     g.add_argument("--patterns", type=Path, default=None, help="user soft-404 patterns YAML")
     g.add_argument("--no-soft404-probe", action="store_true")
 

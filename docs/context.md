@@ -304,6 +304,12 @@ Override-переменные: `URL=…`, `RATE=…`, `OUT_DIR=…`.
   после `BeautifulSoup.get_text()` и никогда не срабатывали. `load_patterns()` теперь валидирует
   `target` против `VALID_TARGETS = {'title', 'h1', 'body', 'raw'}` и падает с понятной ошибкой
   при опечатках в пользовательском YAML.
+- **CLI numeric validation** — `--timeout`, `--concurrency`, `--max-body-bytes`,
+  `--redirect-chain-threshold` теперь требуют `> 0`; `--depth`, `--max-pages`,
+  `--rate-limit`, `--max-redirects` — `>= 0` (0 = unlimited / "не следовать"). Раньше
+  отрицательные/нулевые значения молча принимались и приводили к неочевидному поведению
+  (например, `--concurrency 0` маскировалось через `max(1, …)` в crawler'е).
+  Валидация на уровне argparse — невалидные значения дают чистый exit 2 со ссылкой на флаг.
 
 ## Что осталось вне первой итерации
 
