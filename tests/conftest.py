@@ -105,6 +105,48 @@ async def big_html(_):
     return Response(BIG_HTML, media_type="text/html")
 
 
+# Cycle pages: /cycle-a links to /cycle-b which links back to /cycle-a.
+CYCLE_A_HTML = (
+    "<html><head><title>A</title></head><body>"
+    "<h1>A</h1><a href='/cycle-b'>to B</a>"
+    "</body></html>"
+)
+CYCLE_B_HTML = (
+    "<html><head><title>B</title></head><body>"
+    "<h1>B</h1><a href='/cycle-a'>to A</a>"
+    "</body></html>"
+)
+
+
+async def cycle_a(_):
+    return HTMLResponse(CYCLE_A_HTML)
+
+
+async def cycle_b(_):
+    return HTMLResponse(CYCLE_B_HTML)
+
+
+# Self-loop: /selfloop links to itself.
+SELFLOOP_HTML = (
+    "<html><head><title>self</title></head><body>"
+    "<a href='/selfloop'>self</a>"
+    "</body></html>"
+)
+
+
+async def selfloop(_):
+    return HTMLResponse(SELFLOOP_HTML)
+
+
+# Redirect loop: /rloop-a → /rloop-b → /rloop-a → ...
+async def rloop_a(_):
+    return RedirectResponse("/rloop-b", status_code=302)
+
+
+async def rloop_b(_):
+    return RedirectResponse("/rloop-a", status_code=302)
+
+
 # A "probe" route that returns the *same* body for any unknown URL — common soft-404 behavior.
 async def catchall_soft404(_):
     return HTMLResponse(SOFT404_HTML)
@@ -126,6 +168,11 @@ def _make_app() -> Starlette:
         Route("/img-ok.png", img_ok),
         Route("/big.pdf", big_pdf),
         Route("/big.html", big_html),
+        Route("/cycle-a", cycle_a),
+        Route("/cycle-b", cycle_b),
+        Route("/selfloop", selfloop),
+        Route("/rloop-a", rloop_a),
+        Route("/rloop-b", rloop_b),
     ]
     app = Starlette(routes=routes)
 
