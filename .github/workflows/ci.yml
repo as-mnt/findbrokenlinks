@@ -60,4 +60,3 @@ jobs:
 
       - name: Mypy
         run: mypy src/findbrokenlinks
-        continue-on-error: true  # initial pass — relax once types are tightened

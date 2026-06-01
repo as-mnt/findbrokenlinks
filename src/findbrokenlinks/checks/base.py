@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from findbrokenlinks.models import FetchResult, Issue, LinkRef
+from findbrokenlinks.models import FetchResult, Issue, LinkRef, Severity
 
 if TYPE_CHECKING:
     from findbrokenlinks.config import Config  # noqa: F401 — used in annotations
@@ -28,7 +28,7 @@ class CheckContext:
 
 class Check(ABC):
     code: ClassVar[str]
-    severity: ClassVar[str] = "error"
+    severity: ClassVar[Severity] = "error"
 
     @abstractmethod
     def evaluate(

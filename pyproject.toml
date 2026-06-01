@@ -27,6 +27,7 @@ dev = [
     "uvicorn>=0.30",
     "ruff",
     "mypy>=1.10",
+    "types-PyYAML>=6",
 ]
 
 [project.scripts]
