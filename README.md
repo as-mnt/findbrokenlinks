@@ -177,10 +177,10 @@ class SlowResponseCheck(Check):
         return None
 ```
 
-Add the import to `src/findbrokenlinks/checks/__init__.py` so the decorator
-runs at package import time. That's it — your check is available everywhere,
-and can be toggled via `--enable-checks SLOW_RESPONSE` /
-`--disable-checks SLOW_RESPONSE`.
+That's it. The package auto-discovers every submodule under `checks/` on
+import, so dropping the file is enough — no `__init__.py` edits required.
+Your check is now available everywhere, and can be toggled via
+`--enable-checks SLOW_RESPONSE` / `--disable-checks SLOW_RESPONSE`.
 
 ## Extending: add a new output format
 
@@ -200,8 +200,8 @@ class MyReporter(Reporter):
         ...
 ```
 
-Add the import to `reporters/__init__.py` and you can now pass
-`--format myfmt`.
+Drop the file under `reporters/` — same auto-discovery applies — and you
+can now pass `--format myfmt`.
 
 ## Extending: custom soft-404 patterns
 

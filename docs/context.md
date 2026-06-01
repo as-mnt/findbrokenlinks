@@ -168,9 +168,9 @@ class MyCheck(Check):
         return None
 ```
 
-Добавить импорт в `checks/__init__.py` (иначе декоратор не выполнится). Готово —
-контроль участвует во всех обходах, включается/отключается через
-`--enable-checks` / `--disable-checks`.
+Файла в `checks/` достаточно — `__init__.py` сам подтягивает все submodules через
+`pkgutil.iter_modules` (auto-discovery). Готово — контроль участвует во всех обходах,
+включается/отключается через `--enable-checks` / `--disable-checks`.
 
 Тест расширяемости: `tests/test_extension.py` показывает, что регистрация и работа
 проходят без правок ядра.
@@ -193,7 +193,8 @@ class MyReporter(Reporter):
         ...
 ```
 
-Добавить импорт в `reporters/__init__.py`. CLI автоматически примет `--format myfmt`.
+`reporters/__init__.py` тоже auto-discoverit submodules — править его не нужно. CLI
+автоматически примет `--format myfmt`.
 
 ### Стриминговый репортер (опционально)
 
@@ -314,6 +315,12 @@ Override-переменные: `URL=…`, `RATE=…`, `OUT_DIR=…`.
   HTML/MD-шаблонов, rich для прогресс-бара), но в реализации не использованы: HTML/Markdown
   репортеры собраны вручную через `html.escape` + f-strings, прогресс идёт через stdlib
   `logging`. Удалены из `pyproject.toml`. `plan.md` оставлен как исторический срез.
+- **Plugin auto-discovery** — `checks/__init__.py` и `reporters/__init__.py` теперь
+  обходят свои подмодули через `pkgutil.iter_modules` и импортируют их по одному. Раньше
+  каждый новый плагин требовал ручного добавления строки в `__init__.py` — иначе
+  `@register` не выполнялся. Теперь достаточно положить файл с декоратором в каталог.
+  Тесты в `tests/test_autodiscover.py` подтверждают: синтетический check / reporter,
+  записанный в каталог при тесте, подхватывается без правок ядра.
 
 ## Что осталось вне первой итерации
 
