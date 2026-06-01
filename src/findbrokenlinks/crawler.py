@@ -45,6 +45,7 @@ async def crawl(config: Config) -> list[Finding]:
             timeout_s=config.timeout_s,
             max_redirects=config.max_redirects,
             user_agent=config.user_agent,
+            max_body_bytes=config.max_body_bytes,
         )
         robots = (
             None

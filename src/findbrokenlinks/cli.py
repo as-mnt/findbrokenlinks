@@ -42,6 +42,13 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--timeout", type=float, default=15.0, dest="timeout_s")
     g.add_argument("--max-redirects", type=int, default=10)
     g.add_argument(
+        "--max-body-bytes",
+        type=int,
+        default=1_048_576,
+        help="cap on text response body size (default: 1048576 = 1 MB). "
+        "Non-text responses are never downloaded.",
+    )
+    g.add_argument(
         "--user-agent",
         default="findbrokenlinks/0.1 (+https://example.local)",
     )
@@ -103,6 +110,7 @@ def _config_from_args(args: argparse.Namespace) -> Config:
         concurrency=args.concurrency,
         timeout_s=args.timeout_s,
         max_redirects=args.max_redirects,
+        max_body_bytes=args.max_body_bytes,
         user_agent=args.user_agent,
         ignore_robots=args.ignore_robots,
         use_sitemap=args.use_sitemap,

@@ -23,6 +23,9 @@ edits needed.
   `junit` (XML), `sarif`. Emit multiple at once with `--format a,b,c`.
 - **Polite by default**: respects `robots.txt`, rate-limited (token bucket),
   bounded concurrency, configurable timeouts and redirect caps.
+- **Bandwidth-efficient**: streams responses — binary content (PDFs, archives,
+  images) is never downloaded, only its status code is checked. Text bodies
+  are capped (default 1 MB) so a runaway HTML page can't exhaust memory.
 - **HTML coverage** beyond `<a href>`: also checks `<img src>`,
   `<script src>`, `<link href>`.
 - **Extensible**: new check = one file + `@register`. Same for report formats.
@@ -87,6 +90,8 @@ Network:
   --concurrency N                default: 10
   --timeout SECONDS              default: 15
   --max-redirects N              default: 10
+  --max-body-bytes N             default: 1048576 (1 MB) — cap on text bodies;
+                                 non-text responses are never downloaded
   --user-agent UA
   --ignore-robots
 

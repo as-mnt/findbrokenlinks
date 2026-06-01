@@ -185,6 +185,7 @@ Network:
   --concurrency N                default: 10
   --timeout SECONDS              default: 15
   --max-redirects N              default: 10
+  --max-body-bytes N             default: 1048576 (1 MB) — cap on text bodies
   --user-agent UA
   --ignore-robots
 

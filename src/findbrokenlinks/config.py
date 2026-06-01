@@ -17,6 +17,7 @@ class Config:
     concurrency: int = 10
     timeout_s: float = 15.0
     max_redirects: int = 10
+    max_body_bytes: int = 1_048_576  # 1 MB; only applies to text bodies
     user_agent: str = "findbrokenlinks/0.1 (+https://example.local)"
     ignore_robots: bool = False
     use_sitemap: bool = False

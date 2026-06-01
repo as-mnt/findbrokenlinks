@@ -85,6 +85,26 @@ async def img_ok(_):
     return Response(b"\x89PNG\r\n\x1a\n", media_type="image/png")
 
 
+# Big "PDF" — 5 MB. Must NOT be downloaded by the crawler (binary content-type).
+BIG_PDF = b"%PDF-1.4\n" + b"A" * (5 * 1024 * 1024)
+
+
+async def big_pdf(_):
+    return Response(BIG_PDF, media_type="application/pdf")
+
+
+# Big HTML — 2 MB. Must be downloaded but capped by --max-body-bytes.
+BIG_HTML = (
+    b"<html><head><title>big</title></head><body>"
+    + b"x" * (2 * 1024 * 1024)
+    + b"</body></html>"
+)
+
+
+async def big_html(_):
+    return Response(BIG_HTML, media_type="text/html")
+
+
 # A "probe" route that returns the *same* body for any unknown URL — common soft-404 behavior.
 async def catchall_soft404(_):
     return HTMLResponse(SOFT404_HTML)
@@ -104,6 +124,8 @@ def _make_app() -> Starlette:
         Route("/soft404-pattern", soft404_pattern),
         Route("/img-broken.png", img_broken),
         Route("/img-ok.png", img_ok),
+        Route("/big.pdf", big_pdf),
+        Route("/big.html", big_html),
     ]
     app = Starlette(routes=routes)
 
