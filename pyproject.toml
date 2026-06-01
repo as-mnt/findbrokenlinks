@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "findbrokenlinks"
+version = "0.1.0"
+description = "Async broken-link crawler with pluggable checks and reporters"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{name = "findbrokenlinks contributors"}]
+dependencies = [
+    "httpx[http2]>=0.27",
+    "beautifulsoup4>=4.12",
+    "lxml>=5.0",
+    "pyyaml>=6.0",
+    "jinja2>=3.1",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-httpx>=0.30",
+    "starlette>=0.37",
+    "uvicorn>=0.30",
+    "ruff",
+    "mypy>=1.10",
+]
+
+[project.scripts]
+findbrokenlinks = "findbrokenlinks.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+findbrokenlinks = ["patterns/*.yaml", "templates/*.html.j2", "templates/*.md.j2"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "W"]

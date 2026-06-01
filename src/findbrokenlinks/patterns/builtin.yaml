@@ -1,0 +1,48 @@
+# Built-in soft-404 patterns. Each entry: name, target (title|h1|body), regex.
+- name: generic_page_not_found_title
+  target: title
+  regex: '(?i)(^|\W)(page not found|not found|404)(\W|$)'
+
+- name: generic_page_not_found_h1
+  target: h1
+  regex: '(?i)(page not found|not found|404|nothing found here)'
+
+- name: russian_not_found_title
+  target: title
+  regex: '(?i)(страница не найдена|не найдено|документ не найден)'
+
+- name: russian_not_found_body
+  target: body
+  regex: 'Запрашиваемая страница не найдена|Страница не существует|Документ не найден на сервере'
+
+- name: wordpress_404
+  target: body
+  regex: "It looks like nothing was found at this location|Oops! That page can.t be found"
+
+- name: drupal_404
+  target: body
+  regex: "The requested page could not be found"
+
+- name: joomla_404
+  target: body
+  regex: "Article not found|Article #__ID__ not found"
+
+- name: bitrix_404
+  target: body
+  regex: "Запрашиваемая страница не найдена|Раздел не найден"
+
+- name: tilda_404
+  target: body
+  regex: "tilda-error-404|This page doesn.t exist"
+
+- name: nginx_default_404
+  target: body
+  regex: '<center><h1>404 Not Found</h1></center>'
+
+- name: apache_default_404
+  target: body
+  regex: 'The requested URL .* was not found on this server'
+
+- name: iis_default_404
+  target: body
+  regex: 'HTTP Error 404\.0|The resource you are looking for has been removed'

@@ -1,0 +1,266 @@
+# findbrokenlinks
+
+[![CI](https://github.com/as-mnt/findbrokenlinks/actions/workflows/ci.yml/badge.svg)](https://github.com/as-mnt/findbrokenlinks/actions/workflows/ci.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+Async crawler that finds links on a website whose behavior in a browser would
+**not match user expectations**: 404s, network failures, redirects to weird
+places, "soft 404" pages where a CMS returns 200 but says "not found".
+
+Built around pluggable **checks** and **reporters** — adding a new control or
+output format means dropping a file with an `@register` decorator. No core
+edits needed.
+
+## Features
+
+- **Crawl modes**: `page` (single page), `internal` (same domain), or
+  `internal+external` (recurse internal, validate external) — `--mode`.
+- **Six built-in checks** — flag HTTP errors, network failures, redirect chains,
+  redirects to the home page, and two soft-404 detectors (regex patterns +
+  baseline probing).
+- **Seven output formats**: `csv`, `tsv`, `json`, `html`, `markdown`,
+  `junit` (XML), `sarif`. Emit multiple at once with `--format a,b,c`.
+- **Polite by default**: respects `robots.txt`, rate-limited (token bucket),
+  bounded concurrency, configurable timeouts and redirect caps.
+- **HTML coverage** beyond `<a href>`: also checks `<img src>`,
+  `<script src>`, `<link href>`.
+- **Extensible**: new check = one file + `@register`. Same for report formats.
+- **CI-friendly**: exits non-zero if any `error`-severity finding; JUnit and
+  SARIF outputs slot into GitHub Code Scanning / GitLab / Jenkins.
+
+## Installation
+
+Requires Python **3.11+**.
+
+```bash
+git clone https://github.com/as-mnt/findbrokenlinks
+cd findbrokenlinks
+make install            # runtime only
+# or
+make install-dev        # + pytest, ruff, mypy, starlette (for integration tests)
+```
+
+This creates a `.venv/` and installs the package in editable mode. After
+`make install` you have `.venv/bin/findbrokenlinks` available.
+
+## Quick start
+
+```bash
+# Crawl a site, internal pages + validate external links, TSV to stdout
+.venv/bin/findbrokenlinks https://example.com
+
+# Single page mode, HTML report
+.venv/bin/findbrokenlinks https://example.com --mode page \
+    --format html -o report.html
+
+# Emit several formats at once
+.venv/bin/findbrokenlinks https://example.com \
+    --format csv,json,html,markdown --output-dir reports/
+
+# Run as a Python module
+python -m findbrokenlinks https://example.com --mode internal
+```
+
+Or via Makefile shortcuts (override `URL=…` on the command line):
+
+```bash
+make run URL=https://example.com
+make run-page URL=https://example.com
+make run-internal URL=https://example.com
+make run-html URL=https://example.com OUT_DIR=reports
+make run-multi URL=https://example.com OUT_DIR=reports
+```
+
+## CLI reference
+
+```
+findbrokenlinks <URL> [options]
+
+Scope:
+  --mode {page,internal,internal+external}   default: internal+external
+  --depth N                                  default: 0 (unlimited)
+  --use-sitemap                              seed from /sitemap.xml
+
+Network:
+  --rate-limit RPS               default: 5
+  --concurrency N                default: 10
+  --timeout SECONDS              default: 15
+  --max-redirects N              default: 10
+  --user-agent UA
+  --ignore-robots
+
+Checks:
+  --enable-checks code1,code2
+  --disable-checks code1,code2
+  --redirect-chain-threshold N   default: 3
+  --patterns PATH                user soft-404 patterns YAML
+  --no-soft404-probe
+
+Output:
+  --format fmt[,fmt...]          csv|tsv|json|html|markdown|junit|sarif (default: tsv)
+  --output PATH                  default: stdout (single format only)
+  --output-dir DIR               required for multi-format output
+
+Misc:
+  -v / --verbose
+  --log-file PATH
+```
+
+## Built-in checks
+
+| Code | Severity | Triggers when |
+|---|---|---|
+| `HTTP_ERROR` | error | response status ≥ 400 |
+| `NETWORK_ERROR` | error | DNS / TCP / TLS / timeout failure |
+| `REDIRECT_TO_HOME` | warning | redirect terminates at `/` (common soft-404 pattern) |
+| `REDIRECT_CHAIN` | warning | redirect chain length > `--redirect-chain-threshold` |
+| `SOFT_404_PATTERN` | warning | 200 OK but page matches a "not found" regex |
+| `SOFT_404_PROBE` | warning | 200 OK but body matches the host's known 404 baseline |
+
+The probe-based detector requests a random nonexistent URL per host at startup
+and remembers the response (status, normalized text, hash). Any 2xx response
+whose body matches the baseline is flagged.
+
+## Output
+
+Every reporter produces the same fields per finding:
+
+- `source_page` — page where the link was found
+- `link_url` — the link's target URL
+- `final_url` — where the request actually ended up after redirects
+- `anchor` — link text or alt attribute
+- `tag` — `a` / `img` / `script` / `link` / `seed`
+- `status` — HTTP status (empty on network error)
+- `redirect_chain` — list of intermediate URLs
+- `issue_codes` — which checks fired
+- `severity` — `error` / `warning` / `info`
+- `details` — human-readable explanation
+
+HTML and Markdown reports additionally **group findings by source page**.
+
+## Extending: add a new check
+
+No core edits required. Create `src/findbrokenlinks/checks/my_check.py`:
+
+```python
+from findbrokenlinks.checks.base import Check, CheckContext, register
+from findbrokenlinks.models import FetchResult, Issue, LinkRef
+
+
+@register
+class SlowResponseCheck(Check):
+    code = "SLOW_RESPONSE"
+    severity = "warning"
+
+    def evaluate(self, link: LinkRef, fetch: FetchResult, ctx: CheckContext) -> Issue | None:
+        if fetch.elapsed_ms > 5_000:
+            return Issue(self.code, self.severity, f"slow: {fetch.elapsed_ms:.0f}ms",
+                         {"ms": fetch.elapsed_ms})
+        return None
+```
+
+Add the import to `src/findbrokenlinks/checks/__init__.py` so the decorator
+runs at package import time. That's it — your check is available everywhere,
+and can be toggled via `--enable-checks SLOW_RESPONSE` /
+`--disable-checks SLOW_RESPONSE`.
+
+## Extending: add a new output format
+
+Same pattern. Create `src/findbrokenlinks/reporters/my_reporter.py`:
+
+```python
+from findbrokenlinks.models import Finding
+from findbrokenlinks.reporters.base import Reporter, register
+
+
+@register
+class MyReporter(Reporter):
+    name = "myfmt"
+    file_ext = "myx"
+
+    def render(self, findings: list[Finding]) -> str:
+        ...
+```
+
+Add the import to `reporters/__init__.py` and you can now pass
+`--format myfmt`.
+
+## Extending: custom soft-404 patterns
+
+Built-in patterns live in `src/findbrokenlinks/patterns/builtin.yaml`. Add your
+own without forking — pass `--patterns my_patterns.yaml`:
+
+```yaml
+- name: my_cms_404
+  target: title           # title | h1 | body
+  regex: '(?i)not here'
+```
+
+User patterns are merged with the built-in set (Composite).
+
+## Architecture
+
+```
+seed URL ──► Crawler (asyncio.Queue + N workers)
+                │
+                ├─► Fetcher  ──► httpx.AsyncClient (rate-limited, robots-aware)
+                ├─► HTMLExtractor (bs4 + lxml)
+                ├─► Checks  (Strategy + Registry, per-finding evaluation)
+                └─► Reporter (Strategy + Registry, multiple formats)
+```
+
+Design patterns used:
+
+- **Strategy + Registry** — `Check` and `Reporter` ABCs with `@register`-driven
+  plug-in collections
+- **Producer–Consumer / Worker Pool** — `asyncio.Queue` + N workers
+- **Composite** — built-in + user soft-404 patterns merged
+- **Factory** — `get_reporter(name)` resolves a format string
+- **Pipeline** — Fetcher → Extractor → Checks → Reporter
+
+See `docs/plan.md` and `docs/context.md` for the full design and rationale.
+
+## Development
+
+```bash
+make install-dev          # set up dev environment
+make test                 # run all 31 tests (~1s)
+make test-unit            # unit tests only (skip live-server integration)
+make test-integration     # only the live-server integration test
+make lint                 # ruff
+make typecheck            # mypy
+make clean                # nuke venv, caches, generated reports
+```
+
+Tests run against a local Starlette server with known-broken routes — no
+network access required for CI.
+
+## CI integration
+
+The CLI returns exit code `1` whenever an `error`-severity finding is present,
+so a basic GitHub Actions step is enough:
+
+```yaml
+- run: pip install -e .
+- run: findbrokenlinks https://your-site.example --mode internal+external \
+       --format junit -o link-check.xml
+- uses: mikepenz/action-junit-report@v4
+  if: always()
+  with:
+    report_paths: link-check.xml
+```
+
+For GitHub Code Scanning, swap `--format junit` for `--format sarif` and
+upload via `github/codeql-action/upload-sarif`.
+
+## Documentation
+
+- [`docs/task.md`](docs/task.md) — original problem statement and decisions
+- [`docs/plan.md`](docs/plan.md) — the approved implementation plan
+- [`docs/context.md`](docs/context.md) — implementation snapshot, file layout,
+  how to extend each subsystem
+
+## License
+
+MIT — see [LICENSE](LICENSE).
