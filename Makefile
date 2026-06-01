@@ -1,4 +1,4 @@
-.PHONY: help venv install install-dev test test-unit test-integration lint typecheck clean \
+.PHONY: help venv install install-dev test test-unit test-integration lint typecheck check clean \
         run run-page run-internal run-all run-html run-json run-jsonl run-multi smoke
 
 PY      ?= python3
@@ -49,6 +49,12 @@ lint: install-dev ## Lint with ruff
 
 typecheck: install-dev ## Static typecheck with mypy
 	$(BIN)/mypy src/findbrokenlinks
+
+# Mirrors the GitHub Actions CI pipeline (.github/workflows/ci.yml): same three
+# gates that block merges remotely run locally in the same order. Run this
+# before pushing to catch what CI would catch — cheaper checks first so a
+# trivial lint slip fails fast without waiting for the test suite.
+check: lint typecheck test ## Run lint + typecheck + tests — the full CI gate locally
 
 # ---------- run examples ----------
 # All run targets accept URL=... and RATE=... overrides.

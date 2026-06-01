@@ -244,7 +244,9 @@ See `docs/plan.md` and `docs/context.md` for the full design and rationale.
 
 ```bash
 make install-dev          # set up dev environment
-make test                 # run all 38 tests (~1s)
+make check                # ← run before pushing: lint + typecheck + tests
+                          #   (mirrors the GitHub Actions pipeline)
+make test                 # run all 43 tests (~1s)
 make test-unit            # unit tests only (skip live-server integration)
 make test-integration     # only the live-server integration test
 make lint                 # ruff

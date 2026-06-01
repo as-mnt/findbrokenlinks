@@ -269,6 +269,7 @@ Exit code: `1` если есть `error`-уровня находки, иначе
 | `make install` / `install-dev` | venv + runtime / +dev зависимости |
 | `make test` / `test-unit` / `test-integration` | Тесты |
 | `make lint` / `typecheck` | ruff / mypy |
+| `make check` | **lint + typecheck + test одной командой** — повторяет CI-пайплайн локально, запускать перед `git push` |
 | `make run URL=…` | Дефолтный обход |
 | `make run-page URL=…` | Только одна страница |
 | `make run-internal URL=…` | Только внутренние |
