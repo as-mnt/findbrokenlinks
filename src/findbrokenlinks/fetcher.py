@@ -12,6 +12,13 @@ _TEXT_TYPES = ("text/", "application/xhtml", "application/xml", "application/jso
 
 DEFAULT_MAX_BODY_BYTES = 1_048_576  # 1 MB
 
+# Default Accept-* headers. Many sites' WAFs treat requests without these as
+# bot traffic and return 403 (e.g., ras.ru's ASP.NET endpoint did exactly that
+# during early testing). Our User-Agent still identifies us honestly — we just
+# stop sending malformed-looking requests.
+_DEFAULT_ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+_DEFAULT_ACCEPT_LANGUAGE = "en-US,en;q=0.5"
+
 
 class _Limiter(Protocol):
     async def acquire(self) -> None: ...
@@ -41,6 +48,11 @@ class Fetcher:
         self._max_redirects = max_redirects
         self._user_agent = user_agent
         self._max_body_bytes = max_body_bytes
+        self._headers = {
+            "User-Agent": user_agent,
+            "Accept": _DEFAULT_ACCEPT,
+            "Accept-Language": _DEFAULT_ACCEPT_LANGUAGE,
+        }
 
     async def fetch(self, url: str) -> FetchResult:
         await self._limiter.acquire()
@@ -51,7 +63,7 @@ class Fetcher:
                 url,
                 follow_redirects=True,
                 timeout=self._timeout,
-                headers={"User-Agent": self._user_agent},
+                headers=self._headers,
             ) as resp:
                 content_type = (
                     (resp.headers.get("content-type") or "").split(";")[0].strip().lower()
