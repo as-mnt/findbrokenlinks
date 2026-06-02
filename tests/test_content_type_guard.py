@@ -27,6 +27,14 @@ def test_html_content_types_accepted():
     assert _is_html_content_type("TEXT/HTML")  # case-insensitive
 
 
+def test_text_plain_accepted_for_misconfigured_servers():
+    """Fetcher reads text/plain bodies; the extractor must accept them too,
+    otherwise the body is downloaded for nothing. The risk is low: a real
+    plain-text response has no `<a>`/`<img>` tags for bs4 to find."""
+    assert _is_html_content_type("text/plain")
+    assert _is_html_content_type("text/plain; charset=utf-8")
+
+
 def test_non_html_content_types_rejected():
     assert not _is_html_content_type("text/javascript")
     assert not _is_html_content_type("application/javascript")

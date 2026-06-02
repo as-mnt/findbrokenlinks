@@ -26,18 +26,26 @@ FindingCallback = Callable[[Finding], None]
 
 
 def _is_html_content_type(ct: str | None) -> bool:
-    """True if the response Content-Type is HTML-like enough to extract from.
+    """True if we should hand the body to HTMLExtractor.
 
-    A missing/None content_type is treated as "maybe HTML" so we still try
-    extraction on servers that don't set the header. But when the server
-    explicitly declares JavaScript / CSS / JSON / XML, we trust them and
-    don't parse the body as HTML — otherwise bs4 happily turns JS string
-    literals (`'<img src="'+png+'"/>'`) into fake link findings.
+    Three cases get the body parsed:
+
+    - ``text/html`` and ``application/xhtml+xml`` — obvious.
+    - Missing/empty content_type — treated as "maybe HTML" so a misconfigured
+      server that forgot the header still gets crawled.
+    - ``text/plain`` — kept in sync with ``Fetcher._TEXT_TYPES``: some
+      sites serve real HTML as plain text, and the body also feeds the
+      soft-404 pattern check. For a truly plain-text response bs4 finds
+      no tags, so accepting it costs nothing.
+
+    Explicit JavaScript / CSS / JSON / XML responses are refused — bs4
+    would happily parse JS string literals like ``'<img src="'+png+'"/>'``
+    into fake findings.
     """
     if not ct:
         return True
     ct = ct.lower()
-    return ct.startswith(("text/html", "application/xhtml"))
+    return ct.startswith(("text/html", "application/xhtml", "text/plain"))
 
 
 async def crawl(
