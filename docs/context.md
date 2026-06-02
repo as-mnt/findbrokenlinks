@@ -277,10 +277,13 @@ Checks:
   --no-soft404-probe
 
 Output:
-  --format fmt[,fmt...]          csv|tsv|json|jsonl|html|markdown|junit|sarif (default: tsv)
+  --format fmt[,fmt...]          csv|tsv|json|jsonl|html|markdown|junit|sarif|grouped-json
                                  streaming: csv, tsv, jsonl — пишут по мере обхода
-  --output PATH                  default: stdout (один формат)
-  --output-dir DIR               для нескольких форматов: report.<ext>
+  --output PATH, -o PATH         default: stdout (один формат). Поддерживает шаблоны
+                                 {host}, {date}, {time}, {ts}, {format}, {ext}
+  --output-dir DIR               для нескольких форматов; default
+                                 reports/{host}_{date}_{time}/. Файлы внутри
+                                 называются {format}.{ext} (без коллизий json vs jsonl)
 
 Misc:
   -v / --verbose
