@@ -77,6 +77,40 @@ def test_imperva_body_triggers():
     assert issue is not None and issue.details["vendor"] == "imperva"
 
 
+def test_akamai_html_entity_encoded_body_triggers():
+    """mdpi.com emits 'Reference&#32;&#35;18&#46;523ad417...' — entity-encoded."""
+    body = (
+        "<HTML><HEAD><TITLE>Access Denied</TITLE></HEAD><BODY>"
+        "<H1>Access Denied</H1>"
+        " You don't have permission to access this resource."
+        "Reference&#32;&#35;18&#46;523ad417&#46;1780372373&#46;1b920936"
+        "</BODY></HTML>"
+    )
+    fetch = _fetch(status=403, body=body)
+    issue = AntibotBlockedCheck().evaluate(_link(), fetch, _ctx())
+    assert issue is not None and issue.details["vendor"] == "akamai"
+
+
+def test_ddos_guard_server_header_triggers():
+    """iz.ru returns 403 with `server: ddos-guard` and an essentially empty body."""
+    fetch = _fetch(status=403, body="", server="ddos-guard")
+    issue = AntibotBlockedCheck().evaluate(_link(), fetch, _ctx())
+    assert issue is not None and issue.details["vendor"] == "ddos-guard"
+
+
+def test_cf_mitigated_header_triggers():
+    """Cloudflare sets cf-mitigated only when it actually blocked the request."""
+    fetch = _fetch(status=403, body="", **{"cf-mitigated": "block"})
+    issue = AntibotBlockedCheck().evaluate(_link(), fetch, _ctx())
+    assert issue is not None and issue.details["vendor"] == "cloudflare"
+
+
+def test_generic_server_header_does_not_trigger():
+    """`server: nginx` is not DDoS-Guard — header_value_re must filter."""
+    fetch = _fetch(status=403, body="<html>Forbidden</html>", server="nginx")
+    assert AntibotBlockedCheck().evaluate(_link(), fetch, _ctx()) is None
+
+
 # ----- negative cases (must not falsely fire) ----- #
 
 def test_plain_404_does_not_trigger():

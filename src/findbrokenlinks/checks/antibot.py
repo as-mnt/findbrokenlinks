@@ -15,6 +15,7 @@ depending on whether they want to triage these separately.
 
 from __future__ import annotations
 
+import html
 import re
 from dataclasses import dataclass
 
@@ -25,12 +26,16 @@ from findbrokenlinks.models import FetchResult, Issue, LinkRef
 @dataclass(frozen=True)
 class _Signature:
     vendor: str
-    # Header signature: the named header (case-insensitive) is present at all.
-    # Only used for headers that are specific to *blocking* — i.e., not
-    # generic platform headers like cf-ray which appear on every Cloudflare
-    # response (legit or not).
+    # Header signature: the named header (case-insensitive) is present.
+    # Used either alone (presence is enough — only for headers that are
+    # *only* set on blocks, like x-datadome-cid) or in combination with
+    # header_value_re for headers whose name is generic but value identifies
+    # the vendor (e.g., server: ddos-guard).
     header: str | None = None
-    # Body signature: regex search against the response body.
+    header_value_re: re.Pattern[str] | None = None
+    # Body signature: regex search against the response body. Matched against
+    # the entity-decoded body so HTML-encoded payloads (Akamai's typical
+    # "Reference&#32;&#35;..." output) match plain-text patterns.
     body_re: re.Pattern[str] | None = None
 
 
@@ -39,6 +44,17 @@ _SIGNATURES: tuple[_Signature, ...] = (
     _Signature("datadome", header="x-datadome-cid"),
     _Signature("perimeterx", header="x-sp-crid"),  # the tass.ru case
     _Signature("sucuri", header="x-sucuri-block"),
+    # Cloudflare sets cf-mitigated specifically on requests it blocked or
+    # challenged — distinct from the generic cf-ray that appears everywhere.
+    _Signature("cloudflare", header="cf-mitigated"),
+    # DDoS-Guard (Russian DDoS protection CDN) — the iz.ru case. The Server
+    # header value is the reliable signal; the header name itself is generic
+    # but the value isn't.
+    _Signature(
+        "ddos-guard",
+        header="server",
+        header_value_re=re.compile(r"(?i)ddos[-_ ]?guard"),
+    ),
     # Cloudflare interstitial / challenge body (their "Just a moment..." page).
     _Signature(
         "cloudflare",
@@ -48,12 +64,19 @@ _SIGNATURES: tuple[_Signature, ...] = (
         "cloudflare",
         body_re=re.compile(r"(?i)cloudflare[^<]{0,200}(ray id|attention required)"),
     ),
-    # Akamai bot manager block page.
-    _Signature("akamai", body_re=re.compile(r"(?i)reference\s*#\d+\.[a-f0-9]+|akamaighost")),
+    # Akamai bot manager block page. mdpi.com emits HTML-entity-encoded
+    # "Reference&#32;&#35;..." — handled by entity-decoding the body before
+    # regex search (see _detect).
+    _Signature(
+        "akamai",
+        body_re=re.compile(r"(?i)reference\s*#\d+\.[a-f0-9]+|akamaighost|edgesuite\.net"),
+    ),
     # Imperva / Incapsula.
     _Signature("imperva", body_re=re.compile(r"(?i)incident\s*id:\s*\d+|imperva|incapsula")),
     # PerimeterX / HUMAN block body (in case header missing).
     _Signature("perimeterx", body_re=re.compile(r"(?i)px-captcha|perimeterx")),
+    # DDoS-Guard sometimes serves a JS challenge body.
+    _Signature("ddos-guard", body_re=re.compile(r"(?i)ddos-guard\.net")),
     # Generic anti-bot text — short bodies typical of WAF block pages.
     _Signature("generic", body_re=re.compile(r"(?i)\bif you are not a bot\b")),
     _Signature("generic", body_re=re.compile(r"(?i)\bbot detected\b|\bare you a bot\b")),
@@ -70,11 +93,21 @@ _SIGNATURES: tuple[_Signature, ...] = (
 def _detect(fetch: FetchResult) -> str | None:
     """Return vendor name if any signature matches the response, else None."""
     headers_lower = {k.lower(): v for k, v in fetch.headers.items()}
-    body = fetch.body or ""
+    raw_body = fetch.body or ""
+    # Entity-decode once: catches Akamai's classic "Reference&#32;&#35;..."
+    # output, where the literal HTML has &#46; in place of `.` and &#35; in
+    # place of `#`.
+    decoded_body = html.unescape(raw_body) if raw_body else ""
     for sig in _SIGNATURES:
-        if sig.header is not None and sig.header.lower() in headers_lower:
-            return sig.vendor
-        if sig.body_re is not None and body and sig.body_re.search(body):
+        if sig.header is not None:
+            value = headers_lower.get(sig.header.lower())
+            if value is None:
+                continue
+            if sig.header_value_re is None or sig.header_value_re.search(value):
+                return sig.vendor
+            # Header present but value didn't match — try other signatures.
+            continue
+        if sig.body_re is not None and decoded_body and sig.body_re.search(decoded_body):
             return sig.vendor
     return None
 
