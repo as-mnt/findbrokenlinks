@@ -287,6 +287,7 @@ Exit code: `1` если есть `error`-уровня находки, иначе
 | `make run-html URL=…` | HTML-отчёт (batch — пишется в конце) |
 | `make run-json URL=…` | JSON-отчёт (batch — пишется в конце) |
 | `make run-jsonl URL=…` | **Streaming JSONL** — `tail -f`-able во время обхода |
+| `make run-grouped URL=…` | Сгруппированный по `final_url` JSON — компактный отчёт для больших сайтов |
 | `make run-multi URL=…` | csv/json/html/markdown одновременно |
 | `make smoke` | Быстрая проверка example.com |
 | `make clean` | Снести venv, кеши, отчёты |

@@ -1,5 +1,5 @@
 .PHONY: help venv install install-dev test test-unit test-integration lint typecheck check clean \
-        run run-page run-internal run-all run-html run-json run-jsonl run-multi smoke
+        run run-page run-internal run-all run-html run-json run-jsonl run-grouped run-multi smoke
 
 PY      ?= python3
 VENV    ?= .venv
@@ -92,6 +92,18 @@ run-jsonl: install ## Streaming JSONL report → $(OUT_DIR)/report.jsonl (tail-a
 	mkdir -p $(OUT_DIR)
 	$(FBL) $(URL) --mode internal+external --rate-limit $(RATE) \
 	    --format jsonl -o $(OUT_DIR)/report.jsonl
+
+# Grouped JSON: aggregates findings by `final_url` so a broken link that lives
+# in a site-wide template (header/footer/menu) collapses from N findings (one
+# per page that includes the template) to a single record with occurrences
+# count and source-page samples. On real-world crawls this is a 30–100×
+# size reduction and makes the report navigable. Same data shape as JSON,
+# different aggregation — pick this for first-pass triage of large sites,
+# use `run-json`/`run-jsonl` when you need every (link, source_page) pair.
+run-grouped: install ## Findings grouped by final_url → $(OUT_DIR)/report.grouped.json. URL=...
+	mkdir -p $(OUT_DIR)
+	$(FBL) $(URL) --mode internal+external --rate-limit $(RATE) \
+	    --format grouped-json -o $(OUT_DIR)/report.grouped.json
 
 run-multi: install ## Emit csv/json/html/markdown into $(OUT_DIR)/. URL=...
 	$(FBL) $(URL) --mode internal+external --rate-limit $(RATE) \
