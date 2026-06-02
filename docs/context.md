@@ -4,26 +4,36 @@
 
 ## Статус
 
-- ✅ Все 7 контролей и 9 репортеров (`csv`, `tsv`, `json`, `jsonl`, `html`, `markdown`, `junit`, `sarif`, `grouped-json`)
+- ✅ Все 7 контролей (включая `ANTIBOT_BLOCKED`) и 9 репортеров (`csv`, `tsv`, `json`, `jsonl`,
+  `html`, `markdown`, `junit`, `sarif`, `grouped-json`)
 - ✅ Async-краулер с воркер-пулом, token-bucket rate-limit, robots.txt, дедупликация по
   `final_url` после редиректов, страховка `--max-pages` против безграничных URL-пространств
 - ✅ Защита от утечки extraction за пределы scope: при редиректе на чужой хост в режимах
   `internal` / `internal+external` тело не парсится (page mode сохраняет старое поведение)
+- ✅ Content-type guard: HTMLExtractor не дёргается на не-HTML ответах (JS, CSS, JSON) —
+  иначе bs4 интерпретирует JS-строковые литералы как настоящие `<a>`/`<img>` теги
+- ✅ Honest-but-well-formed запросы: Fetcher шлёт `Accept` и `Accept-Language` рядом с
+  идентифицирующим UA, что снимает большую часть WAF-false-positive (типа ras.ru)
+- ✅ Anti-bot detection: распознаёт DataDome, PerimeterX, Cloudflare, Akamai, Imperva,
+  DDoS-Guard и login-walls (401) — помечает как warning, а не error
 - ✅ Ленивый baseline-404 probe на каждый внутренний хост
 - ✅ Streaming-фетчер: бинарные ответы (PDF/архивы/видео) **не качаются вовсе**, текстовые
-  читаются чанками до `--max-body-bytes` (default 1 MB)
+  читаются чанками до `--max-body-bytes` (default 1 MB); ловит только HTML/plaintext, не JS/CSS
 - ✅ Streaming-отчёт: при выборе одного streamable формата (`csv` / `tsv` / `jsonl`) находки
   пишутся в файл **по мере появления** — можно `tail -f` во время обхода
 - ✅ CLI с режимами `page` / `internal` / `internal+external`, выбором форматов,
   `--enable-checks` / `--disable-checks`; все числовые параметры валидируются argparse-валидаторами
 - ✅ Soft-404 паттерны с 4 target'ами: `title` / `h1` / `body` / `raw` (нетронутый HTML)
+- ✅ Fetcher классифицирует ошибки как `timeout` / `dns` / `ssl` / `connect` / `network`
+  (SSL-failures не валятся в общую "connect" корзину)
 - ✅ Plugin auto-discovery: новый check/reporter = файл с `@register`, `__init__.py` править не нужно
-- ✅ Makefile с целями для setup / test / lint / типовых запусков (`run-jsonl`, `check` = CI gate)
-- ✅ 72 теста (юнит + интеграционные на локальном Starlette), все зелёные
+- ✅ Makefile с целями для setup / test / lint / типовых запусков (`run-jsonl`, `run-grouped`,
+  `check` = CI gate)
+- ✅ 106 тестов (юнит + интеграционные на локальном Starlette), все зелёные
 - ✅ GitHub Actions CI: Python 3.11/3.12/3.13 + ruff + **blocking** mypy
 - ✅ Опубликовано: https://github.com/as-mnt/findbrokenlinks
 
-Размер кода: ~3230 LOC по `src/findbrokenlinks` + `tests/`.
+Размер кода: ~4080 LOC по `src/findbrokenlinks` + `tests/`.
 
 ## Раскладка файлов
 
@@ -52,15 +62,16 @@ findbrokenlinks/
 │   ├── extractors/
 │   │   ├── base.py                     # ABC Extractor
 │   │   └── html.py                     # bs4: <a>/<img>/<script>/<link> + <base href>
-│   ├── checks/                         # ← точка расширения
+│   ├── checks/                         # ← точка расширения (auto-discovery)
 │   │   ├── base.py                     # Check ABC + REGISTRY + @register + active_checks
 │   │   ├── http_status.py
 │   │   ├── network_error.py
 │   │   ├── redirect_to_home.py
 │   │   ├── redirect_chain.py
 │   │   ├── soft_404_pattern.py         # + load_patterns(extra)
-│   │   └── soft_404_probe.py
-│   ├── reporters/                      # ← точка расширения
+│   │   ├── soft_404_probe.py
+│   │   └── antibot.py                  # DataDome / PerimeterX / Cloudflare / Akamai / 401 login-wall
+│   ├── reporters/                      # ← точка расширения (auto-discovery)
 │   │   ├── base.py                     # Reporter ABC + REGISTRY + streaming API
 │   │   ├── csv_reporter.py             # streaming
 │   │   ├── tsv_reporter.py             # streaming
@@ -69,7 +80,8 @@ findbrokenlinks/
 │   │   ├── html_reporter.py            # batch (группировка по source_page)
 │   │   ├── markdown_reporter.py        # batch
 │   │   ├── junit_reporter.py           # batch
-│   │   └── sarif_reporter.py           # batch
+│   │   ├── sarif_reporter.py           # batch
+│   │   └── grouped_json_reporter.py    # batch — агрегирует findings по final_url
 │   └── patterns/builtin.yaml           # 12 soft-404 паттернов (RU/EN, WP/Drupal/Bitrix/…)
 └── tests/
     ├── conftest.py                     # Starlette fake-server (uvicorn в потоке)
@@ -85,6 +97,11 @@ findbrokenlinks/
     ├── test_max_pages.py               # --max-pages ограничивает enqueue
     ├── test_scope_leak.py              # extract не уходит на чужой хост при редиректе
     ├── test_cli_validation.py          # числовые границы CLI-флагов
+    ├── test_fetcher_headers.py         # Accept/Accept-Language шлются
+    ├── test_fetcher_error_classification.py  # SSL/DNS/timeout/connect различаются
+    ├── test_antibot.py                 # детектор WAF-блокировок и login-walls
+    ├── test_grouped_reporter.py        # grouped-json: aggregation/sort/sample-cap
+    ├── test_content_type_guard.py      # не парсим JS/CSS как HTML
     └── test_crawler_integration.py     # end-to-end по локальному серверу
 ```
 
@@ -153,6 +170,7 @@ seed → │  Config  │
 | `markdown` | ❌ | То же |
 | `junit` | ❌ | Агрегированные `<testsuite tests=N failures=N>` |
 | `sarif` | ❌ | Единый run-объект |
+| `grouped-json` | ❌ | Aggregation по `final_url` требует знания всех findings |
 
 CLI автоматически выбирает streaming-путь, если выбран **один** streamable формат. Multi-format
 (`--format csv,html`) всегда идёт по batch-пути.
@@ -355,6 +373,23 @@ Override-переменные: `URL=…`, `RATE=…`, `OUT_DIR=…`.
   это не сломано, это блок. `HTTP_ERROR` продолжает срабатывать параллельно,
   пользователь сам решает что фильтровать. Триггерится только на 4xx/5xx, чтобы
   слово "bot" в нормальной 200-странице не давало false positive.
+- **Antibot extended coverage** (`0e511f2`) — `html.unescape()` перед body-matching ловит
+  Akamai с entity-encoded "Reference&#32;&#35;..." (mdpi.com); `_Signature.header_value_re`
+  ловит DDoS-Guard через `Server: ddos-guard`; добавлен `cf-mitigated` для Cloudflare.
+  На реальном отчёте: 79/80 топ-403-групп распознаны как antibot.
+- **SSL error classification** (`57d5092`) — `httpx.ConnectError` с упоминанием
+  "ssl"/"certificate" в сообщении теперь даёт `error="ssl"`, а не `"connect"`.
+  Российские госсайты с национальным CA (minobrnauki.gov.ru) больше не выглядят как
+  "не отвечают вообще".
+- **Login wall (401)** (`81b6d1e`) — `_Signature.status_codes` + fallback-сигнатура
+  для bare 401 → `vendor="login_wall"`. Vendor-specific матчи (DataDome/PerimeterX
+  с тем же 401) выигрывают первыми. 113 findings в реальном отчёте переехали из
+  error в warning.
+- **Content-type guard на extraction** (`a90e657`) — `_TEXT_TYPES` сужен до HTML/plaintext,
+  и в `crawler._process()` добавлен `_is_html_content_type()` перед HTMLExtractor.
+  Раньше Drupal-агрегированные JS-бандлы парсились как HTML, и bs4 интерпретировал
+  JS-строковые литералы (`'<img src="'+png+'"/>'`) как настоящие теги — это давало
+  фантомные "template-bug" findings.
 
 ## Что осталось вне первой итерации
 

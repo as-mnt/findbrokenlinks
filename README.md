@@ -19,8 +19,14 @@ edits needed.
 - **Seven built-in checks** — flag HTTP errors, network failures, redirect
   chains, redirects to the home page, two soft-404 detectors (regex patterns +
   baseline probing), and an anti-bot block detector so WAF challenges from
-  Cloudflare / DataDome / PerimeterX / Imperva / Akamai don't masquerade
-  as broken links.
+  Cloudflare / DataDome / PerimeterX / Imperva / Akamai / DDoS-Guard
+  and login walls (401) don't masquerade as broken links.
+- **Polite-but-well-formed HTTP**: keeps an honest `User-Agent`, but pairs
+  it with standard `Accept` and `Accept-Language` headers so WAFs don't
+  treat us as malformed traffic.
+- **Doesn't parse JS as HTML**: bodies are only HTML/plaintext; JS, CSS,
+  JSON aren't read, and HTMLExtractor double-checks `Content-Type` before
+  invoking bs4 — so JavaScript string literals can't become fake findings.
 - **Nine output formats**: `csv`, `tsv`, `json`, `jsonl`, `html`, `markdown`,
   `junit` (XML), `sarif`, `grouped-json`. Emit multiple at once with `--format a,b,c`.
 - **`grouped-json` reporter** collapses findings by `final_url` — one record
@@ -261,7 +267,7 @@ See `docs/plan.md` and `docs/context.md` for the full design and rationale.
 make install-dev          # set up dev environment
 make check                # ← run before pushing: lint + typecheck + tests
                           #   (mirrors the GitHub Actions pipeline)
-make test                 # run all 72 tests (~7s)
+make test                 # run all 106 tests (~7s)
 make test-unit            # unit tests only (skip live-server integration)
 make test-integration     # only the live-server integration test
 make lint                 # ruff
