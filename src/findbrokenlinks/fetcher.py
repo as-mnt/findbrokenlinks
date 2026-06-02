@@ -96,7 +96,15 @@ class Fetcher:
         except httpx.TimeoutException:
             return self._error(url, start, "timeout")
         except httpx.ConnectError as e:
+            # ConnectError covers DNS failures, plain TCP refused, AND SSL
+            # verification errors. Distinguish by message — SSL errors should
+            # not be lumped in with generic "connect" since they're a different
+            # class of problem (often caused by a private CA the OS doesn't
+            # trust by default rather than the site being broken).
             msg = str(e)
+            msg_lower = msg.lower()
+            if "ssl" in msg_lower or "certificate" in msg_lower:
+                return self._error(url, start, "ssl")
             is_dns = "Name or service not known" in msg or "nodename" in msg
             return self._error(url, start, "dns" if is_dns else "connect")
         except httpx.TooManyRedirects:
