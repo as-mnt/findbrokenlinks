@@ -4,12 +4,19 @@ import argparse
 import asyncio
 import logging
 import sys
+from datetime import datetime
 from pathlib import Path
+from typing import TextIO
+from urllib.parse import urlsplit
 
 from findbrokenlinks.config import Config
 from findbrokenlinks.crawler import crawl
 from findbrokenlinks.reporters import REGISTRY as REPORTER_REGISTRY  # noqa: F401 — side effects
 from findbrokenlinks.reporters.base import get_reporter
+
+# Default --output-dir template when the user runs a multi-format crawl without
+# specifying anywhere to write. Substituted via _expand_template().
+_DEFAULT_OUTPUT_DIR_TEMPLATE = "reports/{host}_{date}_{time}/"
 
 _FORMATS = sorted(REPORTER_REGISTRY)
 
@@ -18,6 +25,47 @@ def _csv_set(value: str | None) -> set[str]:
     if not value:
         return set()
     return {v.strip() for v in value.split(",") if v.strip()}
+
+
+def _host_from_url(url: str) -> str:
+    """Extract the hostname for use in output-path templates."""
+    host = (urlsplit(url).hostname or "host").lower()
+    # Path separator would split a single template into a directory boundary
+    # the user didn't ask for. Belt-and-braces — hostnames don't contain '/'.
+    return host.replace("/", "_")
+
+
+def _expand_template(
+    template: str,
+    *,
+    host: str,
+    fmt: str = "",
+    ext: str = "",
+    start: datetime,
+) -> str:
+    """Substitute {host}/{date}/{time}/{ts}/{format}/{ext} placeholders.
+
+    A template without ``{`` is returned literally — that keeps any path the
+    user spelled out by hand working exactly as before. Unknown placeholders
+    surface as a SystemExit so typos like ``{user}`` don't silently end up in
+    the file name.
+    """
+    if "{" not in template:
+        return template
+    try:
+        return template.format(
+            host=host,
+            date=start.strftime("%Y-%m-%d"),
+            time=start.strftime("%H%M%S"),
+            ts=int(start.timestamp()),
+            format=fmt,
+            ext=ext,
+        )
+    except KeyError as e:
+        raise SystemExit(
+            f"unknown placeholder in output path: {e}. "
+            "Available: {host}, {date}, {time}, {ts}, {format}, {ext}"
+        ) from e
 
 
 # ---- numeric argparse type validators ----
@@ -157,13 +205,21 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"output format(s), comma-separated. Available: {','.join(_FORMATS)}",
     )
     g.add_argument(
-        "--output", "-o", type=Path, default=None, help="output file (stdout if omitted)"
+        "--output", "-o",
+        type=Path,
+        default=None,
+        help="output file (stdout if omitted). Supports template placeholders: "
+        "{host}, {date}, {time}, {ts}, {format}, {ext}.",
     )
     g.add_argument(
         "--output-dir",
         type=Path,
         default=None,
-        help="directory for multi-format output (one file per format)",
+        help=(
+            "directory for multi-format output (one file per format). "
+            "When multi-format is selected without this flag, defaults to "
+            f"{_DEFAULT_OUTPUT_DIR_TEMPLATE}. Same template placeholders as --output."
+        ),
     )
 
     p.add_argument("-v", "--verbose", action="store_true")
@@ -220,13 +276,15 @@ def _config_from_args(args: argparse.Namespace) -> Config:
 def _write_batch_outputs(config: Config, findings) -> None:
     """Write outputs for batch-only or multi-format runs (called after crawl finishes)."""
     if len(config.formats) > 1:
-        if not config.output_dir:
-            raise SystemExit("multiple --format values require --output-dir")
+        # output_dir is guaranteed by main() before we reach here.
+        assert config.output_dir is not None
         config.output_dir.mkdir(parents=True, exist_ok=True)
         for fmt in config.formats:
             reporter = get_reporter(fmt)
             data = reporter.render(findings)
-            dst = config.output_dir / f"report.{reporter.file_ext}"
+            # `{format}.{ext}` makes filenames unambiguous even when two
+            # formats share an extension (json and grouped-json both → .json).
+            dst = config.output_dir / f"{reporter.name}.{reporter.file_ext}"
             dst.write_text(data, encoding="utf-8")
             print(f"wrote {dst}", file=sys.stderr)
         return
@@ -234,6 +292,7 @@ def _write_batch_outputs(config: Config, findings) -> None:
     reporter = get_reporter(config.formats[0])
     data = reporter.render(findings)
     if config.output_path:
+        config.output_path.parent.mkdir(parents=True, exist_ok=True)
         config.output_path.write_text(data, encoding="utf-8")
         print(f"wrote {config.output_path}", file=sys.stderr)
     else:
@@ -242,10 +301,46 @@ def _write_batch_outputs(config: Config, findings) -> None:
             sys.stdout.write("\n")
 
 
+def _resolve_output_paths(config: Config, args_url: str) -> None:
+    """Apply default + template expansion to config.output_path / output_dir."""
+    start = datetime.now()
+    host = _host_from_url(args_url)
+
+    # Default --output-dir for multi-format when the user pointed at nothing.
+    if (
+        len(config.formats) > 1
+        and config.output_dir is None
+        and config.output_path is None
+    ):
+        config.output_dir = Path(_DEFAULT_OUTPUT_DIR_TEMPLATE)
+
+    if config.output_dir is not None:
+        # Directory placeholders are restricted to run-level ones — {format} and
+        # {ext} make no sense for a directory shared by all formats.
+        config.output_dir = Path(
+            _expand_template(str(config.output_dir), host=host, start=start)
+        )
+
+    if config.output_path is not None:
+        # For a single file we know the format and its extension; expose both.
+        fmt = config.formats[0]
+        reporter = get_reporter(fmt)
+        config.output_path = Path(
+            _expand_template(
+                str(config.output_path),
+                host=host,
+                fmt=fmt,
+                ext=reporter.file_ext,
+                start=start,
+            )
+        )
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     _setup_logging(args.verbose, args.log_file)
     config = _config_from_args(args)
+    _resolve_output_paths(config, args.url)
 
     # Streaming path: single streamable format → write incrementally as findings appear.
     if len(config.formats) == 1:
@@ -261,8 +356,12 @@ def main(argv: list[str] | None = None) -> int:
 
 def _run_streaming(config: Config, reporter) -> int:
     """Open output once, then emit each finding as it arrives from the crawl."""
-    out = config.output_path.open("w", encoding="utf-8", newline="") \
-        if config.output_path else sys.stdout
+    out: TextIO
+    if config.output_path is not None:
+        config.output_path.parent.mkdir(parents=True, exist_ok=True)
+        out = config.output_path.open("w", encoding="utf-8", newline="")
+    else:
+        out = sys.stdout
     has_error = [False]
     try:
         reporter.stream_start(out)

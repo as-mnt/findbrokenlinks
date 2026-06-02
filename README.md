@@ -129,8 +129,11 @@ Checks:
 Output:
   --format fmt[,fmt...]          csv|tsv|json|jsonl|html|markdown|junit|sarif|grouped-json
                                  (default: tsv); streaming formats: csv, tsv, jsonl
-  --output PATH                  default: stdout (single format only)
-  --output-dir DIR               required for multi-format output
+  --output PATH, -o PATH         default: stdout (single format only). Supports
+                                 placeholders {host}, {date}, {time}, {ts}, {format}, {ext}.
+  --output-dir DIR               directory for multi-format output. Defaults to
+                                 reports/{host}_{date}_{time}/ when omitted. Files
+                                 inside the dir are named {format}.{ext}.
 
 Misc:
   -v / --verbose
