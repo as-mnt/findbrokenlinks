@@ -98,7 +98,7 @@ async def crawl(
         await state.enqueue(seed, extract=True)
 
         if config.use_sitemap and config.mode != "page":
-            await _seed_from_sitemap(client, seed, state, config.user_agent)
+            await _seed_from_sitemap(state, seed)
 
         workers = [
             asyncio.create_task(_worker(state)) for _ in range(max(1, config.concurrency))
@@ -284,25 +284,32 @@ async def _ensure_probe(state: _CrawlState, url: str) -> None:
             state.ctx.baselines[host] = baseline_from_fetch(probe)
 
 
-async def _seed_from_sitemap(
-    client: httpx.AsyncClient, seed: str, state: _CrawlState, user_agent: str
-) -> None:
+async def _seed_from_sitemap(state: _CrawlState, seed: str) -> None:
+    """Fetch /sitemap.xml through the Fetcher so it shares the same headers,
+    rate limiter, timeout and body cap as every other request — otherwise
+    the sitemap path silently bypasses the polite/well-formed/streaming
+    network policy.
+    """
     parts = urlsplit(seed)
     sitemap_url = f"{parts.scheme}://{parts.netloc}/sitemap.xml"
-    try:
-        resp = await client.get(sitemap_url, headers={"User-Agent": user_agent})
-    except httpx.HTTPError:
-        return
-    if resp.status_code != 200:
+    result = await state.fetcher.fetch_text(sitemap_url)
+    if result.status != 200 or not result.body:
         return
     try:
-        urls = _parse_sitemap(resp.text)
+        urls = _parse_sitemap(result.body)
     except Exception:
         return
     for u in urls:
         norm = normalize_url(u)
-        if state.scope.is_internal(norm):
-            await state.enqueue(norm, extract=True)
+        if not state.scope.is_internal(norm):
+            continue
+        # Register a synthetic LinkRef so any HTTP issue on the sitemap-discovered
+        # URL surfaces in findings — without this the URL gets fetched but no
+        # finding is emitted because no LinkRef ever points at it.
+        state.register_link(
+            LinkRef(url=norm, source_page=sitemap_url, anchor=None, tag="sitemap")
+        )
+        await state.enqueue(norm, extract=True)
 
 
 def _parse_sitemap(xml: str) -> Iterable[str]:

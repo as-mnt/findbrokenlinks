@@ -163,6 +163,29 @@ async def js_bundle(_):
     return Response(JS_WITH_FAKE_TAGS, media_type="text/javascript")
 
 
+# Sitemap.xml referencing two internal URLs. The hostname is rebuilt at request
+# time from the incoming request so the URLs match whatever address the test
+# server is listening on (127.0.0.1:<port>).
+async def sitemap_xml(request):
+    base = f"{request.url.scheme}://{request.url.netloc}"
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        f"<url><loc>{base}/from-sitemap-ok</loc></url>"
+        f"<url><loc>{base}/from-sitemap-404</loc></url>"
+        "</urlset>"
+    )
+    return Response(xml, media_type="application/xml")
+
+
+async def from_sitemap_ok(_):
+    return HTMLResponse("<html><body><h1>seeded via sitemap</h1></body></html>")
+
+
+async def from_sitemap_404(_):
+    return PlainTextResponse("nope", status_code=404)
+
+
 # Redirect from internal (127.0.0.1) to an "external" host (localhost). Both resolve to
 # the same uvicorn instance, but scope.is_internal treats hostnames as distinct strings.
 async def external_bait(request):
@@ -210,6 +233,9 @@ def _make_app() -> Starlette:
         Route("/external-bait", external_bait),
         Route("/external-content", external_content),
         Route("/bundle.js", js_bundle),
+        Route("/sitemap.xml", sitemap_xml),
+        Route("/from-sitemap-ok", from_sitemap_ok),
+        Route("/from-sitemap-404", from_sitemap_404),
     ]
     app = Starlette(routes=routes)
 

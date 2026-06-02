@@ -7,10 +7,10 @@ import httpx
 
 from findbrokenlinks.models import FetchResult
 
-# Content-Type prefixes we read into memory. We need bodies for HTML extraction
-# (text/html, application/xhtml) and soft-404 pattern matching (also HTML).
-# text/plain is kept because some misconfigured sites serve real HTML as plain
-# text and we want to crawl those — must stay in lockstep with
+# Content-Type prefixes ``fetch()`` reads into memory. We need bodies for HTML
+# extraction (text/html, application/xhtml) and soft-404 pattern matching (also
+# HTML). text/plain is kept because some misconfigured sites serve real HTML as
+# plain text and we want to crawl those — must stay in lockstep with
 # crawler._is_html_content_type so we don't waste bandwidth reading bodies the
 # extractor will throw away.
 # Other text-like types (text/javascript, text/css, application/json, text/xml,
@@ -18,6 +18,10 @@ from findbrokenlinks.models import FetchResult
 # *produces false positives* — bs4/lxml interpret JS string literals like
 # `'<img src="'+png+'"/>'` as real img tags. Narrow the list explicitly.
 _TEXT_TYPES = ("text/html", "text/plain", "application/xhtml")
+
+# Wider list for ``fetch_text()``: XML and JSON endpoints (sitemaps,
+# robots.txt-style feeds, REST APIs) that callers genuinely need to read.
+_TEXT_AUX_TYPES = _TEXT_TYPES + ("application/xml", "text/xml", "application/json")
 
 DEFAULT_MAX_BODY_BYTES = 1_048_576  # 1 MB
 
@@ -64,6 +68,20 @@ class Fetcher:
         }
 
     async def fetch(self, url: str) -> FetchResult:
+        """Crawl-path fetch: only HTML/plaintext bodies are read."""
+        return await self._fetch(url, body_types=_TEXT_TYPES)
+
+    async def fetch_text(self, url: str) -> FetchResult:
+        """Fetch with body read for HTML + XML + JSON content types.
+
+        Used for ancillary endpoints (sitemap.xml, robots.txt, feeds) that
+        callers need to parse but that aren't HTML. Same headers, limiter,
+        timeout and body cap as the main ``fetch()`` — keeps the network
+        policy uniform across the whole crawl.
+        """
+        return await self._fetch(url, body_types=_TEXT_AUX_TYPES)
+
+    async def _fetch(self, url: str, *, body_types: tuple[str, ...]) -> FetchResult:
         await self._limiter.acquire()
         start = time.perf_counter()
         try:
@@ -77,7 +95,7 @@ class Fetcher:
                 content_type = (
                     (resp.headers.get("content-type") or "").split(";")[0].strip().lower()
                 )
-                is_text = any(content_type.startswith(t) for t in _TEXT_TYPES)
+                is_text = any(content_type.startswith(t) for t in body_types)
 
                 body: str | None = None
                 truncated = False
