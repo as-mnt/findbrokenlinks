@@ -339,6 +339,14 @@ Override-переменные: `URL=…`, `RATE=…`, `OUT_DIR=…`.
 - **README/code alignment для `REDIRECT_CHAIN`** (`976c88f`) — README говорил `>`,
   код всегда работал на `>=`. Поправлен README + добавлен boundary-тест, пинающий
   `hops == threshold` как positive, `hops == threshold - 1` как negative.
+- **Accept / Accept-Language headers** (`63bd735`) — Fetcher теперь отправляет
+  стандартные `Accept` и `Accept-Language` помимо `User-Agent`. На реальном обходе
+  `poi.dvo.ru` ссылка на ras.ru давала 7812 false-positive HTTP 403 — WAF ASP.NET
+  возвращал 403 на минимальный запрос. UA остался прежним, спуфинга нет.
+- **Reporter `grouped-json`** — новый batch-формат, схлопывает находки по `final_url`.
+  Одна записть на уникальный целевой URL: `occurrences`, `distinct_source_pages`,
+  `distinct_link_urls`, sample страниц-источников. На реальном отчёте дало 96.8%
+  сжатие (80 MB → 2.4 MB). Plugin auto-discovery подхватил без правок ядра.
 
 ## Что осталось вне первой итерации
 
