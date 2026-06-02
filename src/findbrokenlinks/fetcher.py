@@ -110,6 +110,13 @@ class Fetcher:
             msg = str(e)
             msg_lower = msg.lower()
             if "ssl" in msg_lower or "certificate" in msg_lower:
+                # "unable to get local issuer certificate" specifically means
+                # the server didn't include the intermediate CA in its TLS
+                # handshake. Browsers paper over this via AIA fetching; Python
+                # ssl doesn't. The fix is on the server side (ship fullchain),
+                # so flag it separately to make the diagnosis obvious.
+                if "unable to get local issuer" in msg_lower:
+                    return self._error(url, start, "ssl_chain")
                 return self._error(url, start, "ssl")
             is_dns = "Name or service not known" in msg or "nodename" in msg
             return self._error(url, start, "dns" if is_dns else "connect")

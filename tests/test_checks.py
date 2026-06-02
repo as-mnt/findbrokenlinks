@@ -60,10 +60,32 @@ def test_http_status_ignores_network_error():
 def test_network_error_triggers():
     issue = NetworkErrorCheck().evaluate(_link(), _fetch(status=None, error="timeout"), _ctx())
     assert issue and issue.code == "NETWORK_ERROR"
+    # Message uses the friendly mapping rather than echoing the raw code.
+    assert "timed out" in issue.message.lower()
 
 
 def test_network_error_no_error():
     assert NetworkErrorCheck().evaluate(_link(), _fetch(status=200), _ctx()) is None
+
+
+def test_network_error_ssl_chain_has_actionable_message():
+    """ssl_chain message must explicitly point at the server-side fix."""
+    issue = NetworkErrorCheck().evaluate(
+        _link(), _fetch(status=None, error="ssl_chain"), _ctx()
+    )
+    assert issue is not None
+    msg = issue.message.lower()
+    assert "intermediate" in msg
+    assert "fullchain" in msg
+
+
+def test_network_error_unknown_error_code_falls_back():
+    """An error code that hasn't been mapped should still produce a message."""
+    issue = NetworkErrorCheck().evaluate(
+        _link(), _fetch(status=None, error="newfangled-error"), _ctx()
+    )
+    assert issue is not None
+    assert "newfangled-error" in issue.message
 
 
 # ----- RedirectToHome ----- #

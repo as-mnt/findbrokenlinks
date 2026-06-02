@@ -29,8 +29,15 @@ def _stream_raising(exc: Exception):
 
 
 @pytest.mark.asyncio
-async def test_ssl_certificate_verify_classified_as_ssl():
-    """ConnectError that mentions SSL/certificate must surface as error='ssl'."""
+async def test_ssl_unable_to_get_local_issuer_classified_as_ssl_chain():
+    """Server didn't send the intermediate CA — actionable as a server-side fix.
+
+    The classic Let's Encrypt misconfiguration (deploy `cert.pem` instead of
+    `fullchain.pem` on nginx) produces exactly this message. Browsers fetch
+    the intermediate via AIA so end users don't notice; SDKs and CLI tools
+    that don't implement AIA see this error. The distinct error code
+    makes the diagnosis explicit.
+    """
     exc = httpx.ConnectError(
         "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: "
         "unable to get local issuer certificate (_ssl.c:1032)"
@@ -39,8 +46,22 @@ async def test_ssl_certificate_verify_classified_as_ssl():
     fetcher = Fetcher(
         client, NoopLimiter(), timeout_s=5.0, max_redirects=10, user_agent="x",
     )
-    result = await fetcher.fetch("https://gov.example/")
-    assert result.error == "ssl", result
+    result = await fetcher.fetch("https://misconfigured.example/")
+    assert result.error == "ssl_chain", result
+
+
+@pytest.mark.asyncio
+async def test_other_ssl_failure_classified_as_generic_ssl():
+    """SSL error not matching the 'unable to get local issuer' pattern."""
+    exc = httpx.ConnectError(
+        "[SSL: CERTIFICATE_HAS_EXPIRED] certificate has expired (_ssl.c:1032)"
+    )
+    client = _stream_raising(exc)
+    fetcher = Fetcher(
+        client, NoopLimiter(), timeout_s=5.0, max_redirects=10, user_agent="x",
+    )
+    result = await fetcher.fetch("https://expired.example/")
+    assert result.error == "ssl"
 
 
 @pytest.mark.asyncio
