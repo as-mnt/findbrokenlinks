@@ -111,6 +111,27 @@ def test_generic_server_header_does_not_trigger():
     assert AntibotBlockedCheck().evaluate(_link(), fetch, _ctx()) is None
 
 
+def test_bare_401_is_login_wall():
+    """A 401 with no vendor signature should be classified as login_wall."""
+    fetch = _fetch(status=401, body="<h1>Unauthorized</h1>")
+    issue = AntibotBlockedCheck().evaluate(_link(), fetch, _ctx())
+    assert issue is not None and issue.details["vendor"] == "login_wall"
+    assert issue.severity == "warning"
+
+
+def test_401_with_vendor_signature_uses_vendor_not_login_wall():
+    """Vendor-specific matches must beat the generic 401 → login_wall fallback."""
+    fetch = _fetch(status=401, body="", **{"x-datadome-cid": "abc"})
+    issue = AntibotBlockedCheck().evaluate(_link(), fetch, _ctx())
+    assert issue is not None and issue.details["vendor"] == "datadome"
+
+
+def test_403_without_signature_still_does_not_trigger():
+    """The 401 fallback must not turn into a 4xx-wide catch-all."""
+    fetch = _fetch(status=403, body="<h1>Forbidden</h1>")
+    assert AntibotBlockedCheck().evaluate(_link(), fetch, _ctx()) is None
+
+
 # ----- negative cases (must not falsely fire) ----- #
 
 def test_plain_404_does_not_trigger():

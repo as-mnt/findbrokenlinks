@@ -37,6 +37,11 @@ class _Signature:
     # the entity-decoded body so HTML-encoded payloads (Akamai's typical
     # "Reference&#32;&#35;..." output) match plain-text patterns.
     body_re: re.Pattern[str] | None = None
+    # Status-only signature: matches purely on the response status code.
+    # Used for fallback labels like "401 → login_wall" that have no body or
+    # header fingerprint to anchor on. Place these at the end of _SIGNATURES
+    # so vendor-specific matches (which return earlier) take precedence.
+    status_codes: frozenset[int] | None = None
 
 
 _SIGNATURES: tuple[_Signature, ...] = (
@@ -87,6 +92,11 @@ _SIGNATURES: tuple[_Signature, ...] = (
     _Signature("generic", body_re=re.compile(r"(?i)ddos protection by")),
     _Signature("generic", body_re=re.compile(r"(?i)pardon our interruption")),
     _Signature("generic", body_re=re.compile(r"(?i)access denied[^<]{0,80}bot")),
+    # Login wall — bare 401 means the URL needs authentication. From a crawl
+    # perspective it's not a broken link; a real user with cookies would get
+    # past it. Kept last in the list so any vendor-specific match for the
+    # same 401 (e.g., DataDome returning 401 with x-datadome-cid) wins first.
+    _Signature("login_wall", status_codes=frozenset({401})),
 )
 
 
@@ -108,6 +118,8 @@ def _detect(fetch: FetchResult) -> str | None:
             # Header present but value didn't match — try other signatures.
             continue
         if sig.body_re is not None and decoded_body and sig.body_re.search(decoded_body):
+            return sig.vendor
+        if sig.status_codes is not None and fetch.status in sig.status_codes:
             return sig.vendor
     return None
 
