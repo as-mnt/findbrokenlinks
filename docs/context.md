@@ -47,7 +47,7 @@ findbrokenlinks/
 ├── pyproject.toml
 ├── docs/
 │   ├── task.md                         # исходная задача и Q&A
-│   ├── plan.md                         # одобренный план реализации
+│   ├── plan.md                         # одобренный план — день 0, snapshot (не актуален)
 │   └── context.md                      # этот файл
 ├── src/findbrokenlinks/
 │   ├── __main__.py                     # python -m findbrokenlinks

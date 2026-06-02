@@ -259,7 +259,8 @@ Design patterns used:
 - **Observer** — `on_finding` callback drives incremental report writing for
   streaming formats (csv, tsv, jsonl)
 
-See `docs/plan.md` and `docs/context.md` for the full design and rationale.
+See `docs/context.md` for the up-to-date design and rationale. `docs/plan.md` is
+the day-0 approved plan, kept as a baseline against which to read the change log.
 
 ## Development
 
@@ -299,7 +300,8 @@ upload via `github/codeql-action/upload-sarif`.
 ## Documentation
 
 - [`docs/task.md`](docs/task.md) — original problem statement and decisions
-- [`docs/plan.md`](docs/plan.md) — the approved implementation plan
+- [`docs/plan.md`](docs/plan.md) — the implementation plan **as approved on day 0**
+  (historical snapshot — see `docs/context.md` for what actually ships)
 - [`docs/context.md`](docs/context.md) — implementation snapshot, file layout,
   how to extend each subsystem
 
