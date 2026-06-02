@@ -16,9 +16,11 @@ edits needed.
 
 - **Crawl modes**: `page` (single page), `internal` (same domain), or
   `internal+external` (recurse internal, validate external) — `--mode`.
-- **Six built-in checks** — flag HTTP errors, network failures, redirect chains,
-  redirects to the home page, and two soft-404 detectors (regex patterns +
-  baseline probing).
+- **Seven built-in checks** — flag HTTP errors, network failures, redirect
+  chains, redirects to the home page, two soft-404 detectors (regex patterns +
+  baseline probing), and an anti-bot block detector so WAF challenges from
+  Cloudflare / DataDome / PerimeterX / Imperva / Akamai don't masquerade
+  as broken links.
 - **Nine output formats**: `csv`, `tsv`, `json`, `jsonl`, `html`, `markdown`,
   `junit` (XML), `sarif`, `grouped-json`. Emit multiple at once with `--format a,b,c`.
 - **`grouped-json` reporter** collapses findings by `final_url` — one record
@@ -139,6 +141,7 @@ Misc:
 | `REDIRECT_CHAIN` | warning | redirect chain length >= `--redirect-chain-threshold` |
 | `SOFT_404_PATTERN` | warning | 200 OK but page matches a "not found" regex |
 | `SOFT_404_PROBE` | warning | 200 OK but body matches the host's known 404 baseline |
+| `ANTIBOT_BLOCKED` | warning | 4xx/5xx response matches a known WAF / anti-bot signature (DataDome, PerimeterX, Cloudflare interstitial, Imperva, Akamai, generic "not a bot" / captcha text). Fires alongside `HTTP_ERROR` — disable one or the other to suit your triage. |
 
 The probe-based detector requests a random nonexistent URL per host at startup
 and remembers the response (status, normalized text, hash). Any 2xx response

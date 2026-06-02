@@ -4,7 +4,7 @@
 
 ## Статус
 
-- ✅ Все 6 контролей и 8 репортеров (`csv`, `tsv`, `json`, `jsonl`, `html`, `markdown`, `junit`, `sarif`)
+- ✅ Все 7 контролей и 9 репортеров (`csv`, `tsv`, `json`, `jsonl`, `html`, `markdown`, `junit`, `sarif`, `grouped-json`)
 - ✅ Async-краулер с воркер-пулом, token-bucket rate-limit, robots.txt, дедупликация по
   `final_url` после редиректов, страховка `--max-pages` против безграничных URL-пространств
 - ✅ Защита от утечки extraction за пределы scope: при редиректе на чужой хост в режимах
@@ -348,6 +348,13 @@ Override-переменные: `URL=…`, `RATE=…`, `OUT_DIR=…`.
   Одна записть на уникальный целевой URL: `occurrences`, `distinct_source_pages`,
   `distinct_link_urls`, sample страниц-источников. На реальном отчёте дало 96.8%
   сжатие (80 MB → 2.4 MB). Plugin auto-discovery подхватил без правок ядра.
+- **Check `ANTIBOT_BLOCKED`** — на реальном обходе tass.ru возвращал 403 от PerimeterX
+  WAF, выглядел как сломанная ссылка. Новый чек ловит WAF-сигнатуры по заголовкам
+  (`x-datadome-cid`, `x-sp-crid`, `x-sucuri-block`) и телу (Cloudflare interstitial,
+  Imperva incident-id, generic "not a bot" / captcha-текст). Severity `warning` —
+  это не сломано, это блок. `HTTP_ERROR` продолжает срабатывать параллельно,
+  пользователь сам решает что фильтровать. Триггерится только на 4xx/5xx, чтобы
+  слово "bot" в нормальной 200-странице не давало false positive.
 
 ## Что осталось вне первой итерации
 
