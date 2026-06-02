@@ -7,8 +7,14 @@ import httpx
 
 from findbrokenlinks.models import FetchResult
 
-# Content-Type prefixes we consider "text-like" and worth reading into memory.
-_TEXT_TYPES = ("text/", "application/xhtml", "application/xml", "application/json")
+# Content-Type prefixes we read into memory. We need bodies for HTML extraction
+# (text/html, application/xhtml) and soft-404 pattern matching (also HTML).
+# Other text-like types (text/javascript, text/css, application/json, text/xml,
+# application/xml) don't contribute to either, and parsing JS as HTML actively
+# *produces false positives* — bs4/lxml interpret JS string literals like
+# `'<img src="'+png+'"/>'` as real img tags. Narrow the list explicitly.
+# text/plain is kept because some misconfigured sites serve HTML as plain text.
+_TEXT_TYPES = ("text/html", "text/plain", "application/xhtml")
 
 DEFAULT_MAX_BODY_BYTES = 1_048_576  # 1 MB
 

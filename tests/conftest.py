@@ -147,6 +147,22 @@ async def rloop_b(_):
     return RedirectResponse("/rloop-a", status_code=302)
 
 
+# A JavaScript bundle that contains HTML-looking string literals inside its code.
+# Naively parsing this body as HTML produces fake <a>/<img> findings — what was
+# breaking the real poi.dvo.ru report (Drupal aggregated JS files).
+JS_WITH_FAKE_TAGS = (
+    "var t = function(link, png, src) {\n"
+    "  var html = '<a href=\"/sites/default/files/js/'+link+'\">'+img+text+'</a>';\n"
+    "  html += '<img src=\"/sites/all/modules/poi_toolkit/img/'+png+'.png\" />';\n"
+    "  return html;\n"
+    "};\n"
+)
+
+
+async def js_bundle(_):
+    return Response(JS_WITH_FAKE_TAGS, media_type="text/javascript")
+
+
 # Redirect from internal (127.0.0.1) to an "external" host (localhost). Both resolve to
 # the same uvicorn instance, but scope.is_internal treats hostnames as distinct strings.
 async def external_bait(request):
@@ -193,6 +209,7 @@ def _make_app() -> Starlette:
         Route("/rloop-b", rloop_b),
         Route("/external-bait", external_bait),
         Route("/external-content", external_content),
+        Route("/bundle.js", js_bundle),
     ]
     app = Starlette(routes=routes)
 

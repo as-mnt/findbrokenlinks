@@ -25,6 +25,21 @@ log = logging.getLogger("findbrokenlinks")
 FindingCallback = Callable[[Finding], None]
 
 
+def _is_html_content_type(ct: str | None) -> bool:
+    """True if the response Content-Type is HTML-like enough to extract from.
+
+    A missing/None content_type is treated as "maybe HTML" so we still try
+    extraction on servers that don't set the header. But when the server
+    explicitly declares JavaScript / CSS / JSON / XML, we trust them and
+    don't parse the body as HTML — otherwise bs4 happily turns JS string
+    literals (`'<img src="'+png+'"/>'`) into fake link findings.
+    """
+    if not ct:
+        return True
+    ct = ct.lower()
+    return ct.startswith(("text/html", "application/xhtml"))
+
+
 async def crawl(
     config: Config,
     on_finding: FindingCallback | None = None,
@@ -198,6 +213,13 @@ async def _process(state: _CrawlState, url: str, *, extract: bool, depth: int) -
     state.register_fetch(url, fetch)
 
     if not extract or not fetch.body:
+        return
+
+    # Don't try to parse non-HTML responses (JavaScript, CSS, JSON, etc.) as
+    # HTML. The Fetcher already declines to read those bodies, but if some
+    # path ever changes that we still don't want HTMLExtractor turning
+    # JavaScript string literals into "broken link" findings.
+    if not _is_html_content_type(fetch.content_type):
         return
 
     # extract=True was decided from the request URL, but after redirects the body
