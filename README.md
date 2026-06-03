@@ -163,6 +163,17 @@ The probe-based detector requests a random nonexistent URL per host at startup
 and remembers the response (status, normalized text, hash). Any 2xx response
 whose body matches the baseline is flagged.
 
+> **Single-page apps (SPAs).** A client-rendered app (Next.js, React Router,
+> etc.) typically serves the *same* `index.html` shell with `200 OK` for every
+> path — including the homepage and genuinely nonexistent URLs — and renders the
+> "not found" state in the browser via JavaScript. Since this crawler doesn't
+> execute JS, every page looks identical at the HTTP layer: `SOFT_404_PROBE`
+> fires on essentially everything (the homepage matches the 404 baseline because
+> the shell is byte-identical). That's an accurate signal that broken internal
+> links on such a host can't be detected by HTTP status alone. If you only want
+> the other checks, silence the probe with `--no-soft404-probe` (or
+> `make run-json URL=… FLAGS=--no-soft404-probe`).
+
 ## Output
 
 Every reporter produces the same fields per finding:
