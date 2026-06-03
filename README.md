@@ -94,6 +94,7 @@ make run-internal URL=https://example.com
 make run-html URL=https://example.com OUT_DIR=reports
 make run-jsonl URL=https://example.com OUT_DIR=reports     # streaming JSONL
 make run-multi URL=https://example.com OUT_DIR=reports
+make run-json URL=https://example.com FLAGS=--insecure   # forward extra CLI flags
 ```
 
 ## CLI reference
@@ -118,6 +119,12 @@ Network:
                                  non-text responses are never downloaded
   --user-agent UA
   --ignore-robots
+  --insecure, -k                 disable TLS certificate verification (like curl -k).
+                                 NOTE: an incomplete chain (server missing its
+                                 intermediate CA) is already crawled by default and
+                                 reported as a NETWORK_ERROR *warning* — this flag is
+                                 for other cert problems (expired, self-signed, wrong
+                                 host) and suppresses ssl/ssl_chain findings entirely.
 
 Checks:
   --enable-checks code1,code2
@@ -145,7 +152,7 @@ Misc:
 | Code | Severity | Triggers when |
 |---|---|---|
 | `HTTP_ERROR` | error | response status ≥ 400 |
-| `NETWORK_ERROR` | error | DNS / TCP / TLS / timeout failure |
+| `NETWORK_ERROR` | error / warning | DNS / TCP / TLS / timeout failure (error). Also **warning** when a page was crawled over a relaxed TLS chain — i.e. the server omitted its intermediate CA (`ssl_chain`); the crawl proceeds, the broken chain is flagged so you can ship `fullchain.pem`. |
 | `REDIRECT_TO_HOME` | warning | redirect terminates at `/` (common soft-404 pattern) |
 | `REDIRECT_CHAIN` | warning | redirect chain length >= `--redirect-chain-threshold` |
 | `SOFT_404_PATTERN` | warning | 200 OK but page matches a "not found" regex |

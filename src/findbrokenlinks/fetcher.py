@@ -54,6 +54,7 @@ class Fetcher:
         max_redirects: int,
         user_agent: str,
         max_body_bytes: int = DEFAULT_MAX_BODY_BYTES,
+        insecure_client: httpx.AsyncClient | None = None,
     ) -> None:
         self._client = client
         self._limiter = limiter
@@ -61,6 +62,11 @@ class Fetcher:
         self._max_redirects = max_redirects
         self._user_agent = user_agent
         self._max_body_bytes = max_body_bytes
+        # Verification-disabled client used only to retry requests that failed
+        # with an incomplete certificate chain (missing intermediate CA). When
+        # the primary client already has verification off (--insecure), no
+        # fallback is needed and this stays None.
+        self._insecure_client = insecure_client
         self._headers = {
             "User-Agent": user_agent,
             "Accept": _DEFAULT_ACCEPT,
@@ -84,8 +90,27 @@ class Fetcher:
     async def _fetch(self, url: str, *, body_types: tuple[str, ...]) -> FetchResult:
         await self._limiter.acquire()
         start = time.perf_counter()
+        result = await self._attempt(self._client, url, body_types, start)
+        # Incomplete-chain recovery (default behavior): a server that omits its
+        # intermediate CA is rejected by Python's TLS stack but accepted by
+        # browsers (which fetch the missing cert via AIA). Rather than abort the
+        # whole crawl on such sites, retry once over a verification-disabled
+        # client. If that succeeds we crawl the page normally and downgrade the
+        # problem to a warning via tls_warning; if it still fails the original
+        # ssl_chain error stands.
+        if result.error == "ssl_chain" and self._insecure_client is not None:
+            await self._limiter.acquire()
+            retry = await self._attempt(self._insecure_client, url, body_types, start)
+            if retry.error is None:
+                retry.tls_warning = "ssl_chain"
+                return retry
+        return result
+
+    async def _attempt(
+        self, client: httpx.AsyncClient, url: str, body_types: tuple[str, ...], start: float
+    ) -> FetchResult:
         try:
-            async with self._client.stream(
+            async with client.stream(
                 "GET",
                 url,
                 follow_redirects=True,

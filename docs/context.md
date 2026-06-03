@@ -24,12 +24,15 @@
 - ✅ CLI с режимами `page` / `internal` / `internal+external`, выбором форматов,
   `--enable-checks` / `--disable-checks`; все числовые параметры валидируются argparse-валидаторами
 - ✅ Soft-404 паттерны с 4 target'ами: `title` / `h1` / `body` / `raw` (нетронутый HTML)
-- ✅ Fetcher классифицирует ошибки как `timeout` / `dns` / `ssl` / `connect` / `network`
-  (SSL-failures не валятся в общую "connect" корзину)
+- ✅ Fetcher классифицирует ошибки как `timeout` / `dns` / `ssl` / `ssl_chain` / `connect` / `network`
+  (SSL-failures не валятся в общую "connect" корзину). Неполная цепочка (`ssl_chain`,
+  сервер не прислал intermediate CA) **по умолчанию не блокирует обход**: запрос
+  ретраится без верификации и страница обходится, но фиксируется как `NETWORK_ERROR`
+  warning. `--insecure` / `-k` отключает верификацию полностью
 - ✅ Plugin auto-discovery: новый check/reporter = файл с `@register`, `__init__.py` править не нужно
 - ✅ Makefile с целями для setup / test / lint / типовых запусков (`run-jsonl`, `run-grouped`,
   `check` = CI gate)
-- ✅ 106 тестов (юнит + интеграционные на локальном Starlette), все зелёные
+- ✅ 138 тестов (юнит + интеграционные на локальном Starlette), все зелёные
 - ✅ GitHub Actions CI: Python 3.11/3.12/3.13 + ruff + **blocking** mypy
 - ✅ Опубликовано: https://github.com/as-mnt/findbrokenlinks
 
@@ -268,6 +271,11 @@ Network:
                                  бинарные ответы (PDF, изображения, архивы) не качаются вовсе
   --user-agent UA
   --ignore-robots
+  --insecure, -k                 отключить проверку TLS-сертификата (как curl -k).
+                                 По умолчанию неполная цепочка (нет intermediate CA)
+                                 и так не блокирует обход — ретрай без верификации +
+                                 NETWORK_ERROR warning. Флаг нужен для прочих SSL-проблем
+                                 (просрочка, self-signed, чужой хост): подавляет ssl/ssl_chain
 
 Checks:
   --enable-checks code1,code2
@@ -313,7 +321,8 @@ Exit code: `1` если есть `error`-уровня находки, иначе
 | `make smoke` | Быстрая проверка example.com |
 | `make clean` | Снести venv, кеши, отчёты |
 
-Override-переменные: `URL=…`, `RATE=…`, `OUT_DIR=…`.
+Override-переменные: `URL=…`, `RATE=…`, `OUT_DIR=…`, `FLAGS=…` (доп. флаги в любой
+run-таргет, напр. `make run-json URL=https://site FLAGS=--insecure`).
 
 ## История изменений после v0.1
 
@@ -393,6 +402,18 @@ Override-переменные: `URL=…`, `RATE=…`, `OUT_DIR=…`.
   Раньше Drupal-агрегированные JS-бандлы парсились как HTML, и bs4 интерпретировал
   JS-строковые литералы (`'<img src="'+png+'"/>'`) как настоящие теги — это давало
   фантомные "template-bug" findings.
+- **Incomplete-chain recovery по умолчанию + `--insecure`** — раньше сайт с неполной
+  цепочкой (сервер шлёт leaf без intermediate CA, напр. spectrumit.ru) валил весь
+  обход: seed получал `error="ssl_chain"`, ссылок ноль, exit code 1, `make` печатал
+  `Error 1`. Теперь `Fetcher` держит второй, verification-disabled клиент и при
+  ошибке **именно `ssl_chain`** ретраит запрос через него; успех → страница
+  обходится, `FetchResult.tls_warning="ssl_chain"`, `NetworkErrorCheck` выдаёт
+  **warning** вместо error. Прочие SSL-ошибки (`ssl`: просрочка/self-signed/чужой
+  хост) не ретраятся и остаются error. Новый CLI-флаг `--insecure` / `-k` отключает
+  верификацию полностью (как `curl -k`) для случаев, которые дефолтное восстановление
+  не покрывает. Makefile получил `FLAGS=…` для проброса. Тесты:
+  `tests/test_fetcher_ssl_chain_fallback.py` (4), warning-кейс в `test_checks.py`,
+  проброс флага в `test_cli_validation.py`.
 
 ## Что осталось вне первой итерации
 

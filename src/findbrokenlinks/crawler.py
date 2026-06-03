@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import secrets
 from collections.abc import Callable, Iterable
@@ -66,12 +67,30 @@ async def crawl(
         max_keepalive_connections=config.concurrency,
     )
 
-    async with httpx.AsyncClient(
-        timeout=timeout,
-        limits=limits,
-        max_redirects=config.max_redirects,
-        http2=True,
-    ) as client:
+    async with contextlib.AsyncExitStack() as stack:
+        client = await stack.enter_async_context(
+            httpx.AsyncClient(
+                verify=not config.insecure,
+                timeout=timeout,
+                limits=limits,
+                max_redirects=config.max_redirects,
+                http2=True,
+            )
+        )
+        # Verification-disabled fallback for the default incomplete-chain
+        # recovery (see Fetcher._fetch). Only needed when the primary client
+        # actually verifies — with --insecure it already doesn't, so skip it.
+        insecure_client: httpx.AsyncClient | None = None
+        if not config.insecure:
+            insecure_client = await stack.enter_async_context(
+                httpx.AsyncClient(
+                    verify=False,
+                    timeout=timeout,
+                    limits=limits,
+                    max_redirects=config.max_redirects,
+                    http2=True,
+                )
+            )
         fetcher = Fetcher(
             client,
             limiter,
@@ -79,6 +98,7 @@ async def crawl(
             max_redirects=config.max_redirects,
             user_agent=config.user_agent,
             max_body_bytes=config.max_body_bytes,
+            insecure_client=insecure_client,
         )
         robots = (
             None

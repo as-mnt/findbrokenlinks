@@ -88,6 +88,22 @@ def test_network_error_unknown_error_code_falls_back():
     assert "newfangled-error" in issue.message
 
 
+def test_network_error_ssl_chain_tls_warning_is_warning_not_error():
+    """A page crawled over a relaxed chain (status 200, tls_warning set) is a
+    warning, not an error — the request succeeded, the operator just needs to
+    know the chain is incomplete."""
+    issue = NetworkErrorCheck().evaluate(
+        _link(), _fetch(status=200, error=None, tls_warning="ssl_chain"), _ctx()
+    )
+    assert issue is not None
+    assert issue.code == "NETWORK_ERROR"
+    assert issue.severity == "warning"
+    assert issue.details == {"tls_warning": "ssl_chain"}
+    msg = issue.message.lower()
+    assert "intermediate" in msg
+    assert "fullchain" in msg
+
+
 # ----- RedirectToHome ----- #
 
 def test_redirect_to_home_triggers():

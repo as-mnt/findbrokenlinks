@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from findbrokenlinks.cli import build_parser
+from findbrokenlinks.cli import _config_from_args, build_parser
 
 
 def _expect_reject(argv: list[str], flag: str, capsys) -> None:
@@ -117,3 +117,16 @@ def test_valid_values_parse_cleanly():
     assert args.rate_limit_rps == 2.5
     assert args.max_redirects == 5
     assert args.redirect_chain_threshold == 2
+
+
+def test_insecure_defaults_off_and_flows_to_config():
+    args = build_parser().parse_args(["http://x/"])
+    assert args.insecure is False
+    assert _config_from_args(args).insecure is False
+
+
+def test_insecure_flag_and_short_alias_set_config():
+    for flag in ("--insecure", "-k"):
+        args = build_parser().parse_args(["http://x/", flag])
+        assert args.insecure is True
+        assert _config_from_args(args).insecure is True

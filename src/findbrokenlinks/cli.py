@@ -185,6 +185,13 @@ def build_parser() -> argparse.ArgumentParser:
         default="findbrokenlinks/0.1 (+https://example.local)",
     )
     g.add_argument("--ignore-robots", action="store_true")
+    g.add_argument(
+        "--insecure", "-k",
+        action="store_true",
+        help="disable TLS certificate verification (like curl -k). Use for sites "
+        "that serve an incomplete chain (missing intermediate CA) which browsers "
+        "accept but Python rejects. Lets the crawl proceed; suppresses ssl/ssl_chain findings.",
+    )
 
     g = p.add_argument_group("checks")
     g.add_argument("--enable-checks", default=None, help="comma-separated check codes")
@@ -260,6 +267,7 @@ def _config_from_args(args: argparse.Namespace) -> Config:
         user_agent=args.user_agent,
         ignore_robots=args.ignore_robots,
         use_sitemap=args.use_sitemap,
+        insecure=args.insecure,
         redirect_chain_threshold=args.redirect_chain_threshold,
         patterns_path=args.patterns,
         soft404_probe_enabled=not args.no_soft404_probe,

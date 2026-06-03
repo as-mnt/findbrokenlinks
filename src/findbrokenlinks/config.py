@@ -22,6 +22,12 @@ class Config:
     user_agent: str = "findbrokenlinks/0.1 (+https://example.local)"
     ignore_robots: bool = False
     use_sitemap: bool = False
+    # Disable TLS certificate verification (httpx verify=False). Opt-in escape
+    # hatch for sites whose chain Python rejects but browsers accept — most
+    # commonly a server that omits the intermediate CA ("unable to get local
+    # issuer certificate"). Trade-off: with verification off the crawl proceeds,
+    # but ssl / ssl_chain findings are no longer raised. Mirrors curl -k.
+    insecure: bool = False
 
     redirect_chain_threshold: int = 3
     patterns_path: Path | None = None

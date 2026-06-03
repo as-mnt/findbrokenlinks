@@ -30,6 +30,11 @@ class FetchResult:
     elapsed_ms: float
     error: str | None = None  # 'timeout' | 'dns' | 'ssl' | 'connect' | other
     content_type: str | None = None
+    # Set when the request only succeeded because TLS verification was relaxed
+    # for a recoverable reason — currently just 'ssl_chain' (missing intermediate
+    # CA). The fetch is otherwise normal (status, body) but we record the lapse
+    # so a check can surface it as a warning. error stays None in this case.
+    tls_warning: str | None = None
 
 
 @dataclass(frozen=True)

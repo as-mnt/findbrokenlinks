@@ -21,6 +21,18 @@ _ERROR_MESSAGES: dict[str, str] = {
     "network": "Network error",
 }
 
+# Warnings keyed by FetchResult.tls_warning — the request *succeeded* (status,
+# body present) but only because verification was relaxed for a recoverable
+# reason. We still crawl the page; the operator just needs to know the chain
+# is broken so they can fix the server.
+_WARNING_MESSAGES: dict[str, str] = {
+    "ssl_chain": (
+        "Incomplete certificate chain — server didn't send the intermediate CA. "
+        "Crawled anyway with TLS verification relaxed (browsers tolerate this via "
+        "AIA fetching). Fix: serve fullchain.pem from the server."
+    ),
+}
+
 
 @register
 class NetworkErrorCheck(Check):
@@ -28,12 +40,22 @@ class NetworkErrorCheck(Check):
     severity = "error"
 
     def evaluate(self, link: LinkRef, fetch: FetchResult, ctx: CheckContext) -> Issue | None:
-        if fetch.error is None:
-            return None
-        message = _ERROR_MESSAGES.get(fetch.error, f"Network error: {fetch.error}")
-        return Issue(
-            code=self.code,
-            severity=self.severity,
-            message=message,
-            details={"error": fetch.error},
-        )
+        if fetch.error is not None:
+            message = _ERROR_MESSAGES.get(fetch.error, f"Network error: {fetch.error}")
+            return Issue(
+                code=self.code,
+                severity="error",
+                message=message,
+                details={"error": fetch.error},
+            )
+        if fetch.tls_warning is not None:
+            message = _WARNING_MESSAGES.get(
+                fetch.tls_warning, f"TLS warning: {fetch.tls_warning}"
+            )
+            return Issue(
+                code=self.code,
+                severity="warning",
+                message=message,
+                details={"tls_warning": fetch.tls_warning},
+            )
+        return None
